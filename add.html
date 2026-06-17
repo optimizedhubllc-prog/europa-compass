@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add a Place — Europa Compass</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
+  :root{--ink:#1a1614;--parchment:#f7f3ec;--warm-white:#fdfaf6;--terracotta:#c05a2e;--gold:#b8922a;--slate:#4a4540;--mist:#e8e2d9;--deep:#2c1f1a;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:var(--warm-white);color:var(--ink);min-height:100vh;}
+
+  nav{padding:16px 20px;background:var(--deep);text-align:center;}
+  .logo{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:var(--parchment);letter-spacing:.04em;}
+  .logo em{color:var(--gold);font-style:italic;}
+
+  .wrap{max-width:480px;margin:0 auto;padding:28px 18px 60px;}
+  .eyebrow{font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--terracotta);font-weight:600;margin-bottom:6px;text-align:center;}
+  .title{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:400;text-align:center;margin-bottom:26px;}
+
+  .gate{background:white;border-radius:14px;border:.5px solid #e0dbd4;padding:26px 22px;}
+  .gate-icon{font-size:2rem;text-align:center;margin-bottom:10px;}
+  .gate-text{font-size:.85rem;color:var(--slate);text-align:center;margin-bottom:18px;line-height:1.6;}
+
+  .field{margin-bottom:16px;}
+  .flabel{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--slate);font-weight:600;margin-bottom:6px;}
+  .finput,.fselect,.ftextarea{width:100%;padding:12px 14px;border:1.5px solid var(--mist);border-radius:9px;font-family:inherit;font-size:.95rem;background:var(--warm-white);color:var(--ink);outline:none;}
+  .finput:focus,.fselect:focus,.ftextarea:focus{border-color:var(--terracotta);}
+  .ftextarea{resize:vertical;min-height:70px;}
+  .fhint{font-size:.72rem;color:#999;margin-top:4px;}
+
+  .submit-btn{width:100%;background:var(--terracotta);color:white;border:none;border-radius:9px;padding:14px;font-family:inherit;font-size:.92rem;font-weight:600;cursor:pointer;margin-top:6px;}
+  .submit-btn:disabled{background:#ccc;}
+  .submit-btn:active{background:#a84d26;}
+
+  .msg{border-radius:9px;padding:12px 14px;font-size:.85rem;margin-top:14px;text-align:center;}
+  .msg.success{background:#e8f5e9;color:#1b5e20;}
+  .msg.error{background:#fff5f5;color:#dc2626;}
+
+  .form-card{background:white;border-radius:14px;border:.5px solid #e0dbd4;padding:22px;display:none;}
+  .form-card.active{display:block;}
+  .gate.active{display:block;}
+  .gate.hidden{display:none;}
+
+  .section-divider{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:#aaa;margin:22px 0 12px;text-align:center;}
+</style>
+</head>
+<body>
+
+<nav><div class="logo">Europa <em>Compass</em></div></nav>
+
+<div class="wrap">
+  <div class="eyebrow">Add to the Collection</div>
+  <h1 class="title">A Place Worth Remembering</h1>
+
+  <div class="gate active" id="gate">
+    <div class="gate-icon">🔒</div>
+    <div class="gate-text">Enter the shared password to add a place.</div>
+    <div class="field">
+      <input type="password" class="finput" id="gate-password" placeholder="Password">
+    </div>
+    <button class="submit-btn" onclick="checkPassword()">Continue</button>
+    <div id="gate-msg"></div>
+  </div>
+
+  <div class="form-card" id="form-card">
+    <div class="field">
+      <label class="flabel">City</label>
+      <input type="text" class="finput" id="city" placeholder="e.g. Seville" list="city-list">
+      <datalist id="city-list">
+        <option>Seville</option><option>Paris</option><option>Rome</option>
+        <option>Lisbon</option><option>Barcelona</option><option>Florence</option>
+      </datalist>
+    </div>
+    <div class="field">
+      <label class="flabel">Country</label>
+      <input type="text" class="finput" id="country" placeholder="e.g. Spain">
+    </div>
+    <div class="field">
+      <label class="flabel">Category</label>
+      <select class="fselect" id="category">
+        <option value="">Choose a category…</option>
+        <option value="filming_location">🐉 Filming Location</option>
+        <option value="rooftop_bar">🌅 Rooftop Bar</option>
+        <option value="market">🛒 Market</option>
+        <option value="church">⛪ Church</option>
+        <option value="photo_spot">📸 Photo Spot</option>
+        <option value="food_wine">🍷 Food & Wine</option>
+        <option value="local_favorite">🗝 Local Favorite</option>
+        <option value="other">📍 Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="flabel">Name of the Place</label>
+      <input type="text" class="finput" id="name" placeholder="e.g. Bar Las Teresas">
+    </div>
+    <div class="field">
+      <label class="flabel">Description</label>
+      <textarea class="ftextarea" id="description" placeholder="What makes this place worth visiting?"></textarea>
+    </div>
+    <div class="field">
+      <label class="flabel">Local Tip</label>
+      <textarea class="ftextarea" id="localTip" placeholder="What would you tell a friend going there?"></textarea>
+      <div class="fhint">The "insider" detail — what to order, when to go, what to avoid.</div>
+    </div>
+    <div class="field">
+      <label class="flabel">Address <span style="text-transform:none;color:#bbb">(optional)</span></label>
+      <input type="text" class="finput" id="address" placeholder="Street address if known">
+    </div>
+    <button class="submit-btn" id="submit-btn" onclick="submitPlace()">Add This Place</button>
+    <div id="form-msg"></div>
+  </div>
+</div>
+
+<script>
+let unlockedPassword = '';
+
+async function checkPassword(){
+  const pw = document.getElementById('gate-password').value;
+  if(!pw){ return; }
+  // We don't verify the password client-side — it's checked
+  // server-side on actual submission. This just stores it locally
+  // so it's not re-typed for every place added in this session.
+  unlockedPassword = pw;
+  document.getElementById('gate').classList.remove('active');
+  document.getElementById('gate').classList.add('hidden');
+  document.getElementById('form-card').classList.add('active');
+}
+
+async function submitPlace(){
+  const city = document.getElementById('city').value.trim();
+  const country = document.getElementById('country').value.trim();
+  const category = document.getElementById('category').value;
+  const name = document.getElementById('name').value.trim();
+  const description = document.getElementById('description').value.trim();
+  const localTip = document.getElementById('localTip').value.trim();
+  const address = document.getElementById('address').value.trim();
+  const msgEl = document.getElementById('form-msg');
+  const btn = document.getElementById('submit-btn');
+
+  if(!city || !category || !name){
+    msgEl.innerHTML = '<div class="msg error">Please fill in city, category, and name.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  msgEl.innerHTML = '';
+
+  try{
+    const res = await fetch('/api/add-place', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password: unlockedPassword,
+        city, country, category, name, description, localTip, address
+      })
+    });
+    const data = await res.json();
+
+    if(!res.ok){
+      if(res.status === 401){
+        // Wrong password — send back to the gate rather than
+        // letting them keep trying against a form that will
+        // never succeed.
+        document.getElementById('form-card').classList.remove('active');
+        document.getElementById('gate').classList.remove('hidden');
+        document.getElementById('gate').classList.add('active');
+        document.getElementById('gate-msg').innerHTML = '<div class="msg error">Incorrect password. Try again.</div>';
+        return;
+      }
+      throw new Error(data.error || 'Something went wrong');
+    }
+
+    msgEl.innerHTML = '<div class="msg success">✓ Added! Thank you for the contribution.</div>';
+    // Clear fields for the next entry, keep password unlocked
+    ['city','country','name','description','localTip','address'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('category').value = '';
+  }catch(e){
+    msgEl.innerHTML = `<div class="msg error">${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Add This Place';
+}
+
+document.getElementById('gate-password').addEventListener('keydown', e => {
+  if(e.key === 'Enter') checkPassword();
+});
+</script>
+</body>
+</html>
