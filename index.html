@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Europa Compass — Find What the Maps Miss</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
+  :root{--ink:#1a1614;--parchment:#f7f3ec;--warm-white:#fdfaf6;--terracotta:#c05a2e;--gold:#b8922a;--slate:#4a4540;--mist:#e8e2d9;--deep:#2c1f1a;--blue:#2c4a6b;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:var(--warm-white);color:var(--ink);min-height:100vh;}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+  nav{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--deep);position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(184,146,42,.3);flex-wrap:wrap;gap:8px;}
+  .logo{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:600;color:var(--parchment);letter-spacing:.04em;}
+  .logo em{color:var(--gold);font-style:italic;}
+  .tabs{display:flex;gap:3px;background:rgba(255,255,255,.06);border-radius:8px;padding:3px;flex-wrap:wrap;}
+  .tab{padding:6px 12px;border:none;background:transparent;color:rgba(247,243,236,.55);font-size:.7rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:5px;transition:all .2s;font-family:inherit;}
+  .tab.active{background:var(--terracotta);color:white;}
+
+  .panel{display:none;}.panel.active{display:block;}
+
+  .hero{background:linear-gradient(135deg,var(--deep) 0%,#3d2318 55%,#1a2a3d 100%);padding:52px 24px 40px;text-align:center;}
+  .eyebrow{font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:10px;}
+  .headline{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,5vw,3.2rem);font-weight:300;color:var(--parchment);line-height:1.15;margin-bottom:8px;}
+  .headline em{color:var(--gold);font-style:italic;}
+  .sub{font-size:.88rem;color:rgba(247,243,236,.6);font-weight:300;margin-bottom:28px;}
+
+  .search-box{max-width:640px;margin:0 auto;}
+  .search-row{display:flex;gap:6px;background:white;border-radius:12px;padding:6px;box-shadow:0 6px 30px rgba(0,0,0,.3);flex-wrap:wrap;}
+  .search-row input{border:none;outline:none;font-family:inherit;font-size:.86rem;background:transparent;color:var(--ink);}
+  #city-in{flex:0 0 auto;width:148px;padding:8px 10px;border-right:1px solid var(--mist);font-weight:500;}
+  #interest-in{flex:1;min-width:120px;padding:8px 12px;}
+  #interest-in::placeholder,#city-in::placeholder{color:#aaa;}
+  .sbtn{background:var(--terracotta);color:white;border:none;border-radius:8px;padding:8px 18px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .2s;}
+  .sbtn:hover{background:#a84d26;}.sbtn:disabled{background:#bbb;cursor:not-allowed;}
+  .chips{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:12px;}
+  .chip{background:rgba(255,255,255,.1);border:1px solid rgba(184,146,42,.3);color:rgba(247,243,236,.8);padding:4px 12px;border-radius:20px;font-size:.73rem;cursor:pointer;transition:all .15s;}
+  .chip:hover{background:rgba(184,146,42,.2);border-color:var(--gold);}
+
+  .area{max-width:940px;margin:0 auto;padding:32px 20px;}
+  .rh{display:flex;align-items:baseline;gap:12px;margin-bottom:22px;}
+  .rt{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:400;}
+  .rm{font-size:.72rem;color:var(--slate);text-transform:uppercase;letter-spacing:.1em;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;}
+  .card{background:white;border-radius:12px;border:.5px solid #e0dbd4;padding:18px;display:flex;flex-direction:column;gap:7px;}
+  .badge{display:inline-block;padding:2px 9px;border-radius:4px;font-size:.67rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;}
+  .card-icon{font-size:1.4rem;}
+  .card-name{font-family:'Cormorant Garamond',serif;font-size:1.18rem;font-weight:600;color:var(--deep);line-height:1.2;}
+  .card-city{font-size:.7rem;color:var(--slate);text-transform:uppercase;letter-spacing:.1em;}
+  .card-desc{font-size:.82rem;color:#5a5550;line-height:1.6;flex:1;}
+  .tags{display:flex;gap:4px;flex-wrap:wrap;}
+  .tag{background:var(--parchment);color:var(--slate);padding:2px 7px;border-radius:3px;font-size:.65rem;}
+  .cf{display:flex;gap:6px;padding-top:8px;border-top:.5px solid var(--mist);}
+  .abtn{flex:1;border:none;border-radius:6px;padding:7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit;text-transform:uppercase;letter-spacing:.05em;}
+  .abtn.save{background:#f5f0e8;color:var(--slate);}
+  .abtn.save.saved{background:var(--terracotta);color:white;}
+  .abtn.itin{background:#f5f0e8;color:var(--slate);}
+  .abtn.detail{background:var(--terracotta);color:white;}
+
+  .loading{text-align:center;padding:52px 24px;}
+  .spinner{font-size:2.2rem;display:inline-block;animation:spin 2s linear infinite;margin-bottom:12px;}
+  .load-txt{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--slate);font-style:italic;}
+  .err{background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;color:#dc2626;font-size:.84rem;margin:12px 0;}
+
+  .overlay{display:none;position:fixed;inset:0;background:rgba(26,22,20,.85);z-index:500;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--warm-white);border-radius:14px;max-width:640px;width:100%;overflow:hidden;margin-top:10px;}
+  .mhd{background:var(--deep);padding:22px 26px;position:relative;}
+  .mclose{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.1);border:none;color:white;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:.85rem;}
+  .micon{font-size:1.9rem;margin-bottom:7px;}
+  .mtitle{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:300;color:var(--parchment);margin-bottom:3px;}
+  .mloc{font-size:.7rem;color:var(--gold);text-transform:uppercase;letter-spacing:.15em;}
+  .mbody{padding:22px 26px;}
+  .msect{margin-bottom:16px;padding-bottom:16px;border-bottom:.5px solid var(--mist);}
+  .msect:last-child{border-bottom:none;margin-bottom:0;}
+  .mstitle{font-size:.67rem;text-transform:uppercase;letter-spacing:.15em;color:var(--terracotta);font-weight:600;margin-bottom:6px;}
+  .mcontent{font-size:.87rem;line-height:1.75;color:#4a4540;}
+
+  .sw{max-width:840px;margin:0 auto;padding:38px 20px;}
+  .seye{font-size:.67rem;letter-spacing:.2em;text-transform:uppercase;color:var(--terracotta);font-weight:600;margin-bottom:7px;}
+  .stitle{font-family:'Cormorant Garamond',serif;font-size:1.85rem;font-weight:300;margin-bottom:22px;line-height:1.2;}
+  .fcard{background:white;border-radius:12px;border:.5px solid #e0dbd4;padding:20px;margin-bottom:22px;}
+  .frow{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;}
+  .fg{display:flex;flex-direction:column;gap:4px;}
+  .flabel{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--slate);font-weight:600;}
+  .igrid{display:grid;gap:13px;}
+  .icard{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:18px;}
+  .ihd{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .iico{width:35px;height:35px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;background:#f5f0e8;}
+  .ictitle{font-family:'Cormorant Garamond',serif;font-size:1.08rem;font-weight:600;}
+  .ilist{padding-left:15px;display:flex;flex-direction:column;gap:5px;}
+  .ili{font-size:.83rem;line-height:1.65;color:#5a5550;}
+
+  .pool{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:17px;margin-bottom:16px;}
+  .pool-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:var(--terracotta);font-weight:600;margin-bottom:11px;}
+  .pool-chips{display:flex;flex-wrap:wrap;gap:8px;min-height:38px;}
+  .pchip{background:#f5f0e8;border:.5px solid #d8d2c8;border-radius:7px;padding:6px 11px;font-size:.79rem;cursor:grab;display:flex;align-items:center;gap:6px;}
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:13px;margin-bottom:18px;}
+  .dcol{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:15px;min-height:170px;}
+  .dcol.over{border-color:var(--gold);background:#fef9ed;}
+  .dhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;padding-bottom:9px;border-bottom:1px solid var(--mist);}
+  .dlabel{font-family:'Cormorant Garamond',serif;font-size:.97rem;font-weight:600;}
+  .ditem{background:#f5f0e8;border-radius:7px;padding:7px 9px;margin-bottom:6px;display:flex;align-items:center;gap:7px;font-size:.79rem;}
+  .dempty{text-align:center;padding:18px 10px;color:#bbb;font-size:.77rem;border:1.5px dashed #ddd;border-radius:7px;}
+  .addday{background:#f5f0e8;border:1.5px dashed #d8d2c8;border-radius:11px;padding:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#888;font-size:.76rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;min-height:70px;}
+  .aibox{background:white;border-radius:12px;border:.5px solid #e0dbd4;padding:22px;margin-top:18px;}
+  .aidtitle{font-family:'Cormorant Garamond',serif;font-size:1.08rem;font-weight:600;margin-bottom:11px;padding-bottom:6px;border-bottom:1px solid var(--mist);}
+  .aistop{display:flex;gap:9px;margin-bottom:8px;background:#f5f0e8;border-radius:7px;padding:8px 11px;}
+  .aitime{font-size:.72rem;font-weight:600;color:var(--terracotta);min-width:44px;}
+  .aibody{font-size:.82rem;line-height:1.6;color:#5a5550;}
+  .ainame{font-weight:600;color:var(--deep);display:block;margin-bottom:1px;}
+  .toolbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+  .pbtn{background:var(--terracotta);color:white;border:none;border-radius:8px;padding:8px 16px;font-family:inherit;font-size:.78rem;font-weight:600;cursor:pointer;}
+  .bbtn{background:var(--blue);color:white;border:none;border-radius:8px;padding:8px 16px;font-family:inherit;font-size:.78rem;font-weight:600;cursor:pointer;}
+  .brow{display:flex;gap:7px;}
+
+  .synchero{background:linear-gradient(135deg,#1a3a55,var(--blue));border-radius:13px;padding:30px 24px;text-align:center;margin-bottom:22px;}
+  .shtitle{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:300;color:white;margin-bottom:7px;}
+  .shsub{font-size:.84rem;color:rgba(255,255,255,.7);line-height:1.6;}
+  .syncgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;}
+  .scard{background:white;border-radius:12px;border:.5px solid #e0dbd4;padding:20px;}
+  .sctitle{font-family:'Cormorant Garamond',serif;font-size:1.07rem;font-weight:600;margin-bottom:5px;}
+  .scsub{font-size:.77rem;color:#888;margin-bottom:13px;line-height:1.5;}
+  .syncbtn{width:100%;background:var(--blue);color:white;border:none;border-radius:8px;padding:10px;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;margin-top:3px;}
+  .syncbtn.sec{background:white;color:var(--blue);border:1.5px solid var(--blue);}
+  .codebox{background:#f5f0e8;border-radius:9px;padding:16px;text-align:center;margin-top:11px;}
+  .codeval{font-family:monospace;font-size:1.8rem;font-weight:700;color:var(--blue);letter-spacing:.2em;}
+  .codelbl{font-size:.68rem;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-top:3px;}
+  .sitem{display:flex;align-items:center;gap:10px;background:#f5f0e8;border-radius:9px;padding:11px 13px;margin-bottom:8px;}
+  .siname{font-weight:600;font-size:.85rem;}
+  .simeta{font-size:.7rem;color:#888;}
+
+  .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:13px;}
+  .tcard{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:17px;border-left:3px solid var(--gold);}
+  .tcity{font-family:'Cormorant Garamond',serif;font-size:1.03rem;font-weight:600;margin-bottom:2px;}
+  .tcount{font-size:.71rem;color:#888;margin-bottom:9px;}
+  .tplaces{font-size:.79rem;color:#5a5550;line-height:1.7;}
+  .scbtns{display:flex;gap:5px;margin-top:11px;}
+  .scb{flex:1;background:#f5f0e8;border:none;border-radius:5px;padding:6px;font-size:.67rem;color:#7a7060;cursor:pointer;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-family:inherit;}
+  .empty{text-align:center;padding:58px 20px;grid-column:1/-1;}
+  .eico{font-size:2.5rem;margin-bottom:11px;}
+  .etitle{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:#888;margin-bottom:5px;}
+  .esub{font-size:.8rem;color:#aaa;}
+
+  @media(max-width:560px){
+    .syncgrid,.frow{grid-template-columns:1fr;}
+    #city-in{width:100%;border-right:none;border-bottom:1px solid var(--mist);}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Europa <em>Compass</em></div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('discover')">Discover</button>
+    <button class="tab" onclick="showTab('intel')">City Intel</button>
+    <button class="tab" onclick="showTab('itinerary')">Itinerary</button>
+    <button class="tab" onclick="showTab('sync')">Voyage Sync</button>
+    <button class="tab" onclick="showTab('trips')">My Trips</button>
+  </div>
+</nav>
+
+<!-- DISCOVER -->
+<div id="tab-discover" class="panel active">
+  <div class="hero">
+    <div class="eyebrow">Your World, Beyond the Guidebook</div>
+    <h1 class="headline">Find what the <em>maps miss</em></h1>
+    <p class="sub">Hidden churches, filming locations, mom-and-pop gems — anywhere on earth.</p>
+    <div class="search-box">
+      <div class="search-row">
+        <input id="city-in" list="city-list" placeholder="City anywhere…" autocomplete="off">
+        <datalist id="city-list">
+          <option>Amsterdam</option><option>Athens</option><option>Barcelona</option>
+          <option>Berlin</option><option>Budapest</option><option>Copenhagen</option>
+          <option>Dubrovnik</option><option>Dublin</option><option>Edinburgh</option>
+          <option>Florence</option><option>Istanbul</option><option>Krakow</option>
+          <option>Lisbon</option><option>London</option><option>Madrid</option>
+          <option>Marrakech</option><option>Naples</option><option>New Orleans</option>
+          <option>Paris</option><option>Porto</option><option>Prague</option>
+          <option>Rome</option><option>Santorini</option><option>Seville</option>
+          <option>Split</option><option>Stockholm</option><option>Tokyo</option>
+          <option>Venice</option><option>Vienna</option><option>Zurich</option>
+        </datalist>
+        <input id="interest-in" placeholder="Wine bars, Game of Thrones, hidden chapels…">
+        <button class="sbtn" id="disc-btn" onclick="runDiscover()">Explore →</button>
+      </div>
+      <div class="chips">
+        <div class="chip" onclick="setChip('Hidden gems only locals know about')">🗝 Local Secrets</div>
+        <div class="chip" onclick="setChip('Game of Thrones filming locations')">🐉 GoT Locations</div>
+        <div class="chip" onclick="setChip('Best wine bars and natural wine spots')">🍷 Wine Bars</div>
+        <div class="chip" onclick="setChip('Authentic local restaurants tourists never find')">🍽 Authentic Food</div>
+        <div class="chip" onclick="setChip('Hidden churches and sacred spaces')">⛪ Hidden Churches</div>
+        <div class="chip" onclick="setChip('Best rooftop bars and viewpoints')">🌅 Rooftops</div>
+        <div class="chip" onclick="setChip('Street art murals and graffiti neighborhoods')">🎨 Street Art</div>
+        <div class="chip" onclick="setChip('Best coffee shops and specialty cafes locals love')">☕ Coffee</div>
+        <div class="chip" onclick="setChip('Historic markets and local food markets')">🛒 Markets</div>
+        <div class="chip" onclick="setChip('Jazz bars live music and underground venues')">🎵 Live Music</div>
+        <div class="chip" onclick="setChip('Best sunset spots and photography locations')">📸 Photo Spots</div>
+        <div class="chip" onclick="setChip('Day trips and hidden villages nearby')">🚂 Day Trips</div>
+        <div class="chip" onclick="setChip('Michelin star and fine dining restaurants')">⭐ Fine Dining</div>
+        <div class="chip" onclick="setChip('Bookshops libraries and literary spots')">📚 Bookshops</div>
+        <div class="chip" onclick="setChip('Craft beer bars and local breweries')">🍺 Craft Beer</div>
+        <div class="chip" onclick="setChip('Spas thermal baths and wellness experiences')">🧖 Wellness</div>
+      </div>
+    </div>
+  </div>
+  <div class="area" id="disc-results"></div>
+</div>
+
+<!-- CITY INTEL -->
+<div id="tab-intel" class="panel">
+  <div class="sw">
+    <div class="seye">Before You Arrive</div>
+    <h2 class="stitle">City Intelligence Briefing</h2>
+    <div class="fcard">
+      <div class="frow">
+        <div class="fg">
+          <label class="flabel">City</label>
+          <input id="intel-city" list="intel-cities" placeholder="Any city in the world…" autocomplete="off">
+          <datalist id="intel-cities">
+            <option>Amsterdam</option><option>Barcelona</option><option>Dubrovnik</option>
+            <option>Florence</option><option>Lisbon</option><option>Madrid</option>
+            <option>Naples</option><option>Paris</option><option>Porto</option>
+            <option>Prague</option><option>Rome</option><option>Seville</option>
+            <option>Tokyo</option><option>Venice</option><option>Vienna</option>
+          </datalist>
+        </div>
+        <div class="fg">
+          <label class="flabel">Travel Month</label>
+          <select id="intel-month">
+            <option value="">Any time</option>
+            <option>January</option><option>February</option><option>March</option>
+            <option>April</option><option>May</option><option>June</option>
+            <option>July</option><option>August</option><option>September</option>
+            <option>October</option><option>November</option><option>December</option>
+          </select>
+        </div>
+        <button class="sbtn" id="intel-btn" onclick="runIntel()">Briefing →</button>
+      </div>
+    </div>
+    <div id="intel-results"></div>
+  </div>
+</div>
+
+<!-- ITINERARY -->
+<div id="tab-itinerary" class="panel">
+  <div class="sw">
+    <div class="toolbar">
+      <div><div class="seye">Day-by-Day Planning</div><h2 class="stitle" style="margin-bottom:0">Itinerary Builder</h2></div>
+      <div class="brow">
+        <button class="bbtn" id="ai-btn" onclick="generateAI()">✦ AI Schedule</button>
+        <button class="pbtn" onclick="addDay()">+ Add Day</button>
+      </div>
+    </div>
+    <p style="font-size:.8rem;color:#888;margin-bottom:16px">Drag saved places into days. Hit AI Schedule for a timed plan.</p>
+    <div class="pool"><div class="pool-label">Saved Places — drag into a day</div><div class="pool-chips" id="itin-pool"></div></div>
+    <div id="ai-err"></div>
+    <div class="dgrid" id="day-grid"></div>
+    <div id="ai-output"></div>
+  </div>
+</div>
+
+<!-- VOYAGE SYNC -->
+<div id="tab-sync" class="panel">
+  <div class="sw">
+    <div class="synchero">
+      <div class="shtitle">✦ Voyage Sync</div>
+      <div class="shsub">Plan together in real time. Share a trip code with your travel partner and discover the world as a team.</div>
+    </div>
+    <div id="sync-create">
+      <div class="syncgrid">
+        <div class="scard">
+          <div class="sctitle">Start a Shared Trip</div>
+          <div class="scsub">Generate a code. Anyone with it can add to the same trip list.</div>
+          <input id="sync-name" placeholder="Trip name (e.g. Rome 2026)" style="margin-bottom:8px">
+          <button class="syncbtn" onclick="createSync()">Generate Trip Code</button>
+          <div id="code-box" style="display:none" class="codebox">
+            <div class="codeval" id="code-val"></div>
+            <div class="codelbl">Share with your travel partner</div>
+            <button class="syncbtn sec" style="margin-top:10px;width:auto;padding:7px 18px" onclick="copyCode()">Copy Code</button>
+          </div>
+        </div>
+        <div class="scard">
+          <div class="sctitle">Join a Shared Trip</div>
+          <div class="scsub">Enter a code from your partner to start planning together.</div>
+          <input id="join-code" placeholder="Trip code…" maxlength="6" style="text-transform:uppercase;letter-spacing:.15em;font-size:.95rem;margin-bottom:8px">
+          <input id="join-name" placeholder="Your name" style="margin-bottom:8px">
+          <button class="syncbtn sec" onclick="joinSync()">Join Trip</button>
+        </div>
+      </div>
+    </div>
+    <div id="sync-active" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div><div class="seye">Active Trip · Code: <span id="active-code"></span></div><div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem" id="active-name"></div></div>
+        <button class="syncbtn sec" style="width:auto;padding:8px 16px" onclick="leaveSync()">Leave Trip</button>
+      </div>
+      <div style="background:white;border-radius:12px;border:.5px solid #e0dbd4;padding:20px;margin-bottom:14px">
+        <div style="font-size:.67rem;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:600;margin-bottom:13px">Shared Places (<span id="shared-count">0</span>)</div>
+        <div id="sync-list"></div>
+        <div style="margin-top:14px;padding-top:14px;border-top:.5px solid var(--mist)">
+          <div style="font-size:.77rem;color:#888;margin-bottom:8px">Add a place:</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <input id="add-place" placeholder="Place name…" style="flex:1;min-width:120px">
+            <input id="add-city" placeholder="City…" style="width:120px">
+            <button class="syncbtn" style="width:auto;padding:9px 14px;margin-top:0" onclick="addToSync()">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MY TRIPS -->
+<div id="tab-trips" class="panel">
+  <div class="sw">
+    <div class="toolbar">
+      <div><div class="seye">Saved & Planned</div><h2 class="stitle" style="margin-bottom:0">My Trips</h2></div>
+      <div class="brow">
+        <button class="pbtn" onclick="showTab('discover')">+ Discover Places</button>
+        <button class="bbtn" onclick="showTab('sync')">✦ Voyage Sync</button>
+      </div>
+    </div>
+    <div class="tgrid" id="trips-grid"></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal" class="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="mhd">
+      <button class="mclose" onclick="closeModal()">✕</button>
+      <div class="micon" id="m-icon"></div>
+      <div class="mtitle" id="m-title"></div>
+      <div class="mloc" id="m-loc"></div>
+    </div>
+    <div class="mbody" id="m-body"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let saved={};
+let itinDays=[{id:'d1',label:'Day 1',items:[]},{id:'d2',label:'Day 2',items:[]}];
+let dragId=null;
+let syncSession=null;
+
+const BADGES={
+  hidden_gem:{label:'Hidden Gem',bg:'#fef3cd',color:'#7d5a00'},
+  iconic:{label:'Iconic',bg:'#e8f4f8',color:'#1a5276'},
+  restaurant:{label:'Local Food',bg:'#fce4ec',color:'#880e4f'},
+  wine_bar:{label:'Wine Bar',bg:'#f3e5f5',color:'#6a1b9a'},
+  filming_location:{label:'Film Location',bg:'#e8f5e9',color:'#1b5e20'}
+};
+
+// ── API — calls our own serverless proxy ──
+async function ask(prompt,maxTokens=1200){
+  const r=await fetch('/api/ask',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({prompt,maxTokens})
+  });
+  const d=await r.json();
+  if(d.error) throw new Error(d.error);
+  return JSON.parse(d.text.replace(/```json|```/g,'').trim());
+}
+
+// ── Tabs ──
+function showTab(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  document.querySelectorAll('.tab').forEach((b,i)=>{
+    b.classList.toggle('active',['discover','intel','itinerary','sync','trips'][i]===id);
+  });
+  if(id==='itinerary') renderItinerary();
+  if(id==='trips') renderTrips();
+}
+
+// ── Discover ──
+function setChip(q){document.getElementById('interest-in').value=q;}
+function loading(city){return`<div class="loading"><div class="spinner">🧭</div><div class="load-txt">Consulting local insiders${city?' in '+city:''}…</div></div>`;}
+function showErr(id,msg){document.getElementById(id).innerHTML=`<div class="err">${msg}</div>`;}
+
+async function runDiscover(){
+  const city=document.getElementById('city-in').value.trim();
+  const interest=document.getElementById('interest-in').value.trim();
+  if(!city){showErr('disc-results','Please enter a city.');return;}
+  const btn=document.getElementById('disc-btn');
+  btn.disabled=true;btn.textContent='Searching…';
+  document.getElementById('disc-results').innerHTML=loading(city);
+  // Scroll to results on mobile
+  setTimeout(()=>{document.getElementById('disc-results').scrollIntoView({behavior:'smooth',block:'start'});},100);
+  try{
+    const places=await ask(`You are an expert travel curator for ${city}. The traveler loves hidden gems, authentic local experiences, mom-and-pop restaurants, excellent wine, atmosphere, and places connected to film/TV (especially Game of Thrones).
+Interest: "${interest||'best of '+city+' — hidden gems and iconic spots'}"
+Return a JSON array of exactly 6 places. Each object:
+- id: unique string slug
+- name: place name
+- type: one of "hidden_gem"|"iconic"|"restaurant"|"wine_bar"|"filming_location"
+- icon: single emoji
+- city: "${city}"
+- lat: approximate latitude as number
+- lng: approximate longitude as number
+- short_desc: 2 compelling insider sentences
+- tags: array of 2-3 short strings
+ONLY valid JSON array. No markdown.`);
+    renderCards(places,city);
+  }catch(e){showErr('disc-results','Error: '+e.message);}
+  // Always re-enable button no matter what
+  btn.disabled=false;btn.textContent='Explore →';
+  // Scroll nav back into view so user can search again
+  document.querySelector('nav').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderCards(places,city){
+  if(!places||!places.length){showErr('disc-results','No results found.');return;}
+  let h=`<div class="rh">
+    <div class="rt">${city}</div>
+    <div class="rm">${places.length} places found</div>
+    <button class="sbtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="margin-left:auto;font-size:.72rem;padding:6px 14px;">↑ New Search</button>
+  </div><div class="grid">`;
+  places.forEach(p=>{
+    const b=BADGES[p.type]||{label:p.type,bg:'#eee',color:'#333'};
+    const isSaved=!!saved[p.id];
+    h+=`<div class="card">
+      <div class="card-icon">${p.icon}</div>
+      <span class="badge" style="background:${b.bg};color:${b.color}">${b.label}</span>
+      <div class="card-name">${p.name}</div>
+      <div class="card-city">${p.city}</div>
+      <div class="card-desc">${p.short_desc}</div>
+      <div class="tags">${(p.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+      <div class="cf">
+        <button class="abtn save${isSaved?' saved':''}" id="sv-${p.id}" onclick='toggleSave(${JSON.stringify(p).replace(/'/g,"&#39;")})'>${isSaved?'✓ Saved':'+ Save'}</button>
+        <button class="abtn itin" onclick='addToItin(${JSON.stringify(p).replace(/'/g,"&#39;")})'>+ Itinerary</button>
+        <button class="abtn detail" onclick='openDetail(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Insider →</button>
+      </div>
+    </div>`;
+  });
+  document.getElementById('disc-results').innerHTML=h+'</div>';
+}
+
+function toggleSave(p){
+  if(saved[p.id])delete saved[p.id];else saved[p.id]=p;
+  const btn=document.getElementById('sv-'+p.id);
+  if(btn){btn.classList.toggle('saved',!!saved[p.id]);btn.textContent=saved[p.id]?'✓ Saved':'+ Save';}
+}
+
+function addToItin(p){if(!saved[p.id])saved[p.id]=p;showTab('itinerary');}
+
+async function openDetail(p){
+  document.getElementById('m-icon').textContent=p.icon;
+  document.getElementById('m-title').textContent=p.name;
+  document.getElementById('m-loc').textContent=p.city;
+  document.getElementById('m-body').innerHTML=`<div style="font-family:'Cormorant Garamond',serif;font-size:1rem;color:#888;font-style:italic;padding:20px 0">✦  Gathering insider details…</div>`;
+  document.getElementById('modal').classList.add('open');
+  try{
+    const d=await ask(`Expert local guide for ${p.city}. Insider briefing on "${p.name}".
+Return ONLY valid JSON:
+- why_special: 2-3 sentences
+- insider_tip: practical tip tourists miss
+- best_time: when to visit
+- what_to_order_or_do: specific recommendation
+- connections: film/TV/history (mention Game of Thrones if relevant)
+- nearby: 2 nearby places worth combining
+ONLY valid JSON.`);
+    let b='';
+    if(d.why_special)b+=ms("Why It's Special",d.why_special);
+    if(d.insider_tip)b+=ms('🗝️ Insider Tip',d.insider_tip);
+    if(d.best_time)b+=ms('⏰ Best Time',d.best_time);
+    if(d.what_to_order_or_do)b+=ms('🍽️ What to Order / Do',d.what_to_order_or_do);
+    if(d.connections)b+=ms('🎬 Film, TV & History',d.connections);
+    if(d.nearby)b+=ms('📍 Combine With Nearby',d.nearby,true);
+    document.getElementById('m-body').innerHTML=b;
+  }catch(e){document.getElementById('m-body').innerHTML=`<div class="err">${e.message}</div>`;}
+}
+function ms(t,c,last=false){return`<div class="msect"${last?' style="border-bottom:none;margin-bottom:0"':''}><div class="mstitle">${t}</div><div class="mcontent">${c}</div></div>`;}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+
+// ── Intel ──
+async function runIntel(){
+  const city=document.getElementById('intel-city').value.trim();
+  const month=document.getElementById('intel-month').value;
+  if(!city){showErr('intel-results','Please enter a city.');return;}
+  const btn=document.getElementById('intel-btn');
+  btn.disabled=true;btn.textContent='Loading…';
+  document.getElementById('intel-results').innerHTML=loading(city);
+  try{
+    const d=await ask(`Seasoned travel expert. Pre-trip intel for ${city}${month?' in '+month:''}.
+Return ONLY valid JSON:
+- transport:{title:"Getting Around",icon:"🚇",points:[5 specific bullets]}
+- culture:{title:"Culture & Etiquette",icon:"🎭",points:[4 bullets]}
+- money:{title:"Money & Budget",icon:"💶",points:[4 bullets]}
+- food:{title:"Food & Drink Scene",icon:"🍷",points:[5 bullets]}
+- safety:{title:"Safety & Scams",icon:"🛡️",points:[4 tips]}
+${month?`- timing:{title:"Traveling in ${month}",icon:"📅",points:[4 month-specific tips]}`:''}
+ONLY valid JSON.`);
+    const sects=['transport','culture','money','food','safety','timing'].filter(k=>d[k]);
+    let h='<div class="igrid">';
+    sects.forEach(k=>{
+      const s=d[k];
+      h+=`<div class="icard"><div class="ihd"><div class="iico">${s.icon}</div><div class="ictitle">${s.title}</div></div><ul class="ilist">${(s.points||[]).map(pt=>`<li class="ili">${pt}</li>`).join('')}</ul></div>`;
+    });
+    document.getElementById('intel-results').innerHTML=h+'</div>';
+  }catch(e){showErr('intel-results',e.message);}
+  btn.disabled=false;btn.textContent='Briefing →';
+}
+
+// ── Itinerary ──
+function renderItinerary(){
+  const scheduled=itinDays.flatMap(d=>d.items.map(i=>i.id));
+  const pool=Object.values(saved).filter(p=>!scheduled.includes(p.id));
+  document.getElementById('itin-pool').innerHTML=pool.length===0
+    ?'<span style="font-size:.77rem;color:#bbb">Save places in Discover, then drag here.</span>'
+    :pool.map(p=>`<div class="pchip" draggable="true" ondragstart="dragId='${p.id}'">${p.icon} <span>${p.name}</span><span style="font-size:.68rem;color:#aaa">${p.city}</span></div>`).join('');
+  renderDays();
+}
+function renderDays(){
+  let h='';
+  itinDays.forEach(day=>{
+    h+=`<div class="dcol" id="dc-${day.id}" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="dropDay(event,'${day.id}')">
+      <div class="dhd"><div class="dlabel">${day.label}</div><button onclick="removeDay('${day.id}')" style="background:none;border:none;color:#ccc;cursor:pointer">✕</button></div>
+      ${day.items.length===0?'<div class="dempty">Drop places here</div>':
+        day.items.map(p=>`<div class="ditem" draggable="true" ondragstart="dragId='${p.id}'">${p.icon}<div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div><div style="font-size:.68rem;color:#aaa">${p.city}</div></div><button onclick="removeDayItem('${day.id}','${p.id}')" style="background:none;border:none;color:#ccc;cursor:pointer">✕</button></div>`).join('')}
+    </div>`;
+  });
+  h+=`<div class="addday" onclick="addDay()">+ Add Day</div>`;
+  document.getElementById('day-grid').innerHTML=h;
+}
+function dropDay(e,dayId){
+  e.preventDefault();document.getElementById('dc-'+dayId)?.classList.remove('over');
+  if(!dragId)return;
+  const place=saved[dragId]||itinDays.flatMap(d=>d.items).find(i=>i.id===dragId);
+  if(!place)return;
+  itinDays=itinDays.map(d=>({...d,items:d.items.filter(i=>i.id!==dragId)}));
+  const day=itinDays.find(d=>d.id===dayId);
+  if(day&&!day.items.find(i=>i.id===dragId))day.items.push(place);
+  dragId=null;renderItinerary();
+}
+function removeDayItem(dayId,pid){const d=itinDays.find(d=>d.id===dayId);if(d)d.items=d.items.filter(i=>i.id!==pid);renderItinerary();}
+function addDay(){itinDays.push({id:'d'+Date.now(),label:'Day '+(itinDays.length+1),items:[]});renderItinerary();}
+function removeDay(id){if(itinDays.length<=1)return;itinDays=itinDays.filter(d=>d.id!==id);renderItinerary();}
+
+async function generateAI(){
+  const scheduled=itinDays.filter(d=>d.items.length);
+  if(!scheduled.length){document.getElementById('ai-err').innerHTML='<div class="err">Add places to your days first.</div>';return;}
+  document.getElementById('ai-err').innerHTML='';
+  const btn=document.getElementById('ai-btn');btn.disabled=true;btn.textContent='Generating…';
+  document.getElementById('ai-output').innerHTML=loading();
+  try{
+    const summary=scheduled.map(d=>`${d.label}: ${d.items.map(p=>p.name+' ('+p.city+')').join(', ')}`).join('\n');
+    const days=await ask(`European travel planner. Timed daily itinerary:
+${summary}
+Assign times from 9am. Add brief tip per stop. Suggest lunch and dinner.
+Return ONLY valid JSON array, each item: {day,city,stops:[{time,name,note}]}
+No markdown.`);
+    let h='<div class="aibox"><div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:var(--terracotta);font-weight:600;margin-bottom:16px">✦ AI-Generated Schedule</div>';
+    days.forEach(d=>{
+      h+=`<div style="margin-bottom:20px"><div class="aidtitle">${d.day} — ${d.city}</div>`;
+      (d.stops||[]).forEach(s=>{h+=`<div class="aistop"><div class="aitime">${s.time}</div><div class="aibody"><span class="ainame">${s.name}</span>${s.note}</div></div>`;});
+      h+='</div>';
+    });
+    document.getElementById('ai-output').innerHTML=h+'</div>';
+  }catch(e){document.getElementById('ai-output').innerHTML=`<div class="err">${e.message}</div>`;}
+  btn.disabled=false;btn.textContent='✦ AI Schedule';
+}
+
+// ── Voyage Sync ──
+function createSync(){
+  const name=document.getElementById('sync-name').value.trim();
+  if(!name)return;
+  const code=Math.random().toString(36).substring(2,8).toUpperCase();
+  document.getElementById('code-val').textContent=code;
+  document.getElementById('code-box').style.display='block';
+  syncSession={code,name,partner:null,places:Object.values(saved).map(p=>({...p,addedBy:'Me'}))};
+  showSyncActive();
+}
+function joinSync(){
+  const code=document.getElementById('join-code').value.trim().toUpperCase();
+  const name=document.getElementById('join-name').value.trim();
+  if(!code||!name)return;
+  syncSession={code,name:code+' Trip',partner:name,places:[]};
+  showSyncActive();
+}
+function showSyncActive(){
+  document.getElementById('sync-create').style.display='none';
+  document.getElementById('sync-active').style.display='block';
+  document.getElementById('active-code').textContent=syncSession.code;
+  document.getElementById('active-name').textContent=syncSession.name;
+  renderSyncList();
+}
+function renderSyncList(){
+  document.getElementById('shared-count').textContent=syncSession.places.length;
+  document.getElementById('sync-list').innerHTML=syncSession.places.length===0
+    ?'<div style="color:#bbb;font-size:.82rem;text-align:center;padding:18px">No places added yet.</div>'
+    :syncSession.places.map(p=>`<div class="sitem"><span style="font-size:1.2rem">${p.icon||'📍'}</span><div><div class="siname">${p.name}</div><div class="simeta">${p.city} · ${p.addedBy}</div></div></div>`).join('');
+}
+function addToSync(){
+  const name=document.getElementById('add-place').value.trim();
+  const city=document.getElementById('add-city').value.trim();
+  if(!name||!city||!syncSession)return;
+  syncSession.places.push({id:'m'+Date.now(),name,city,icon:'📍',addedBy:syncSession.partner||'Me'});
+  document.getElementById('add-place').value='';document.getElementById('add-city').value='';
+  renderSyncList();
+}
+function leaveSync(){
+  syncSession=null;
+  document.getElementById('sync-create').style.display='block';
+  document.getElementById('sync-active').style.display='none';
+}
+function copyCode(){
+  navigator.clipboard.writeText(syncSession?.code||'');
+  event.target.textContent='Copied!';setTimeout(()=>event.target.textContent='Copy Code',2000);
+}
+
+// ── My Trips ──
+function renderTrips(){
+  const places=Object.values(saved);
+  const byCity={};places.forEach(p=>{if(!byCity[p.city])byCity[p.city]=[];byCity[p.city].push(p);});
+  const g=document.getElementById('trips-grid');
+  if(!places.length){
+    g.innerHTML=`<div class="empty"><div class="eico">🗺️</div><div class="etitle">No places saved yet</div><div class="esub">Explore and save places to build your trips.</div></div>`;
+    return;
+  }
+  g.innerHTML=Object.entries(byCity).map(([city,ps])=>`
+    <div class="tcard">
+      <div class="tcity">${city}</div>
+      <div class="tcount">${ps.length} place${ps.length>1?'s':''} saved</div>
+      <div class="tplaces">${ps.map(p=>`${p.icon} ${p.name}`).join('<br>')}</div>
+      <div class="scbtns">
+        <button class="scb" onclick="showTab('itinerary')">📅 Build</button>
+        <button class="scb" onclick="showTab('sync')">✦ Sync</button>
+        <button class="scb" onclick="clearCity('${city}')">🗑 Clear</button>
+      </div>
+    </div>`).join('');
+}
+function clearCity(city){Object.keys(saved).forEach(id=>{if(saved[id].city===city)delete saved[id];});renderTrips();}
+
+document.getElementById('city-in').addEventListener('keydown',e=>{if(e.key==='Enter')runDiscover();});
+document.getElementById('interest-in').addEventListener('keydown',e=>{if(e.key==='Enter')runDiscover();});
+</script>
+</body>
+</html>

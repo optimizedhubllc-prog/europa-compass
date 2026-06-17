@@ -1,0 +1,8 @@
+{
+  "name": "europa-compass",
+  "version": "1.0.0",
+  "description": "Find what the maps miss — AI-powered travel discovery",
+  "scripts": {
+    "start": "vercel dev"
+  }
+}
