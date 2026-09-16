@@ -36,7 +36,7 @@ export default async function handler(req) {
   }
 
   const body = await req.json();
-  const { password, city, country, category, name, description, localTip, address } = body;
+  const { password, city, country, category, name, description, localTip, address, lat, lng } = body;
 
   // Simple shared-password gate. Not meant to be sophisticated —
   // just enough friction to keep an unlisted form from being
@@ -87,6 +87,8 @@ export default async function handler(req) {
         address: address || null,
         source: 'pedro_janice_verified',
         verified: true,
+        lat: typeof lat === 'number' ? lat : null,
+        lng: typeof lng === 'number' ? lng : null,
       }),
     });
     if (!placeRes.ok) throw new Error(await placeRes.text());
