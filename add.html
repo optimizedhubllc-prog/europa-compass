@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Add a Place — Europa Compass</title>
+<script>
+  window._gmapsLoaded = false;
+  window.gmapsReady = function(){ window._gmapsLoaded = true; (window._gmapsWaiters||[]).forEach(fn=>fn()); window._gmapsWaiters=[]; };
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC34NBEt5Wqo7MxbdtGBAUjbmIKFgh9PRA&libraries=places&callback=gmapsReady&loading=async" defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
   :root{--ink:#1a1614;--parchment:#f7f3ec;--warm-white:#fdfaf6;--terracotta:#c05a2e;--gold:#b8922a;--slate:#4a4540;--mist:#e8e2d9;--deep:#2c1f1a;}
@@ -29,6 +34,12 @@
   .ftextarea{resize:vertical;min-height:70px;}
   .fhint{font-size:.72rem;color:#999;margin-top:4px;}
 
+  .search-field{background:#fff8ec;border:1.5px dashed var(--gold);border-radius:9px;padding:14px;margin-bottom:20px;}
+  .search-field .flabel{color:var(--terracotta);}
+  .search-field .finput{border-color:var(--gold);background:white;}
+  .geo-badge{display:none;font-size:.72rem;color:#1b5e20;background:#e8f5e9;border-radius:6px;padding:6px 10px;margin-top:8px;}
+  .geo-badge.on{display:block;}
+
   .submit-btn{width:100%;background:var(--terracotta);color:white;border:none;border-radius:9px;padding:14px;font-family:inherit;font-size:.92rem;font-weight:600;cursor:pointer;margin-top:6px;}
   .submit-btn:disabled{background:#ccc;}
   .submit-btn:active{background:#a84d26;}
@@ -43,6 +54,7 @@
   .gate.hidden{display:none;}
 
   .section-divider{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:#aaa;margin:22px 0 12px;text-align:center;}
+  .pac-container{font-family:'Inter',sans-serif;z-index:2000;}
 </style>
 </head>
 <body>
@@ -64,6 +76,13 @@
   </div>
 
   <div class="form-card" id="form-card">
+    <div class="search-field">
+      <label class="flabel">Search for the place</label>
+      <input type="text" class="finput" id="place-search" placeholder="Start typing a name or address…">
+      <div class="fhint">Picking a result auto-fills city, country, address, and drops a real pin — fill in below by hand if it's not on Google.</div>
+      <div class="geo-badge" id="geo-badge">📍 Location captured</div>
+    </div>
+
     <div class="field">
       <label class="flabel">City</label>
       <input type="text" class="finput" id="city" placeholder="e.g. Seville" list="city-list">
@@ -114,6 +133,7 @@
 
 <script>
 let unlockedPassword = '';
+let pickedLat = null, pickedLng = null;
 
 async function checkPassword(){
   const pw = document.getElementById('gate-password').value;
@@ -125,6 +145,32 @@ async function checkPassword(){
   document.getElementById('gate').classList.remove('active');
   document.getElementById('gate').classList.add('hidden');
   document.getElementById('form-card').classList.add('active');
+  setupSearchAutocomplete();
+}
+
+function setupSearchAutocomplete(){
+  function ready(){
+    const input=document.getElementById('place-search');
+    const autocomplete=new google.maps.places.Autocomplete(input,{fields:['name','geometry','address_components','formatted_address']});
+    autocomplete.addListener('place_changed',()=>{
+      const place=autocomplete.getPlace();
+      if(!place.geometry){ return; }
+      const comps=place.address_components||[];
+      const cityComp=comps.find(c=>c.types.includes('locality'))
+        ||comps.find(c=>c.types.includes('administrative_area_level_2'))
+        ||comps.find(c=>c.types.includes('administrative_area_level_1'));
+      const countryComp=comps.find(c=>c.types.includes('country'));
+      if(place.name) document.getElementById('name').value=place.name;
+      if(cityComp) document.getElementById('city').value=cityComp.long_name;
+      if(countryComp) document.getElementById('country').value=countryComp.long_name;
+      if(place.formatted_address) document.getElementById('address').value=place.formatted_address;
+      pickedLat=place.geometry.location.lat();
+      pickedLng=place.geometry.location.lng();
+      document.getElementById('geo-badge').classList.add('on');
+    });
+  }
+  if(window._gmapsLoaded) ready();
+  else { window._gmapsWaiters=window._gmapsWaiters||[]; window._gmapsWaiters.push(ready); }
 }
 
 async function submitPlace(){
@@ -153,7 +199,8 @@ async function submitPlace(){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         password: unlockedPassword,
-        city, country, category, name, description, localTip, address
+        city, country, category, name, description, localTip, address,
+        lat: pickedLat, lng: pickedLng
       })
     });
     const data = await res.json();
@@ -174,8 +221,10 @@ async function submitPlace(){
 
     msgEl.innerHTML = '<div class="msg success">✓ Added! Thank you for the contribution.</div>';
     // Clear fields for the next entry, keep password unlocked
-    ['city','country','name','description','localTip','address'].forEach(id => document.getElementById(id).value = '');
+    ['city','country','name','description','localTip','address','place-search'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('category').value = '';
+    document.getElementById('geo-badge').classList.remove('on');
+    pickedLat = null; pickedLng = null;
   }catch(e){
     msgEl.innerHTML = `<div class="msg error">${e.message}</div>`;
   }
