@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Europa Compass — Find What the Maps Miss</title>
+<script>
+  window._gmapsLoaded = false;
+  window.gmapsReady = function(){ window._gmapsLoaded = true; (window._gmapsWaiters||[]).forEach(fn=>fn()); window._gmapsWaiters=[]; };
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC34NBEt5Wqo7MxbdtGBAUjbmIKFgh9PRA&libraries=places&callback=gmapsReady&loading=async" defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
   :root{--ink:#1a1614;--parchment:#f7f3ec;--warm-white:#fdfaf6;--terracotta:#c05a2e;--gold:#b8922a;--slate:#4a4540;--mist:#e8e2d9;--deep:#2c1f1a;--blue:#2c4a6b;}
@@ -148,6 +153,11 @@
     .syncgrid,.frow{grid-template-columns:1fr;}
     #city-in{width:100%;border-right:none;border-bottom:1px solid var(--mist);}
   }
+
+  .map-wrap{margin-top:22px;border-radius:12px;overflow:hidden;border:.5px solid #e0dbd4;}
+  #disc-map,#itin-map{width:100%;height:340px;}
+  .map-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:600;padding:10px 14px;background:#faf7f2;border-bottom:.5px solid var(--mist);}
+  .pac-container{font-family:'Inter',sans-serif;z-index:2000;}
 </style>
 </head>
 <body>
@@ -208,6 +218,12 @@
     </div>
   </div>
   <div class="area" id="disc-results"></div>
+  <div class="area" style="padding-top:0">
+    <div id="disc-map-wrap" class="map-wrap" style="display:none">
+      <div class="map-label">📍 On the map</div>
+      <div id="disc-map"></div>
+    </div>
+  </div>
 </div>
 
 <!-- CITY INTEL -->
@@ -259,6 +275,10 @@
     <div class="pool"><div class="pool-label">Saved Places — drag into a day</div><div class="pool-chips" id="itin-pool"></div></div>
     <div id="ai-err"></div>
     <div class="dgrid" id="day-grid"></div>
+    <div id="itin-map-wrap" class="map-wrap" style="display:none">
+      <div class="map-label">📍 Your itinerary on the map</div>
+      <div id="itin-map"></div>
+    </div>
     <div id="ai-output"></div>
   </div>
 </div>
@@ -302,12 +322,12 @@
         <div style="font-size:.67rem;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:600;margin-bottom:13px">Shared Places (<span id="shared-count">0</span>)</div>
         <div id="sync-list"></div>
         <div style="margin-top:14px;padding-top:14px;border-top:.5px solid var(--mist)">
-          <div style="font-size:.77rem;color:#888;margin-bottom:8px">Add a place:</div>
+          <div style="font-size:.77rem;color:#888;margin-bottom:8px">Search a place to add it — real address, dropped straight on the map:</div>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <input id="add-place" placeholder="Place name…" style="flex:1;min-width:120px">
-            <input id="add-city" placeholder="City…" style="width:120px">
-            <button class="syncbtn" style="width:auto;padding:9px 14px;margin-top:0" onclick="addToSync()">Add</button>
+            <input id="add-place" placeholder="Search a place…" style="flex:1;min-width:180px">
+            <button class="syncbtn" style="width:auto;padding:9px 14px;margin-top:0" onclick="addToSync()" id="add-place-btn" disabled>Add</button>
           </div>
+          <div id="add-place-hint" style="font-size:.7rem;color:#bbb;margin-top:6px">Pick a result from the dropdown, then Add.</div>
         </div>
       </div>
     </div>
@@ -355,8 +375,75 @@ function saveJSON(key, value){
 let saved = loadJSON('ec_saved', {});
 let itinDays = loadJSON('ec_itinDays', [{id:'d1',label:'Day 1',items:[]},{id:'d2',label:'Day 2',items:[]}]);
 let dragId=null;
-let syncSession = loadJSON('ec_syncSession', null); // {code,name,partner,places}
+let syncSession = loadJSON('ec_syncSession', null); // {code,name,partner,places,itinDays}
 let syncPoll = null;
+
+// ── Google Maps ──
+let discMap=null, discMarkers=[], itinMap=null, itinMarkers=[];
+let syncPlaceAutocomplete=null, syncPlacePicked=null;
+function whenGmapsReady(cb){
+  if(window._gmapsLoaded) cb();
+  else { window._gmapsWaiters = window._gmapsWaiters||[]; window._gmapsWaiters.push(cb); }
+}
+function plotMarkers(map, items){
+  const markers=[];
+  const bounds=new google.maps.LatLngBounds();
+  items.forEach(p=>{
+    if(typeof p.lat!=='number'||typeof p.lng!=='number')return;
+    const pos={lat:p.lat,lng:p.lng};
+    const marker=new google.maps.Marker({position:pos,map,title:p.name,label:p.icon?{text:p.icon,fontSize:'14px'}:undefined});
+    marker.addListener('click',()=>{ if(p.short_desc!==undefined) openDetail(p); });
+    markers.push(marker);
+    bounds.extend(pos);
+  });
+  if(markers.length>1) map.fitBounds(bounds);
+  else if(markers.length===1) map.setCenter(markers[0].getPosition());
+  return markers;
+}
+function renderDiscMap(places){
+  const wrap=document.getElementById('disc-map-wrap');
+  const withCoords=(places||[]).filter(p=>typeof p.lat==='number'&&typeof p.lng==='number');
+  if(!withCoords.length){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  whenGmapsReady(()=>{
+    if(!discMap) discMap=new google.maps.Map(document.getElementById('disc-map'),{zoom:13,center:withCoords[0]});
+    discMarkers.forEach(m=>m.setMap(null));
+    discMarkers=plotMarkers(discMap,withCoords);
+  });
+}
+function renderItinMap(){
+  const wrap=document.getElementById('itin-map-wrap');
+  const items=currentItinDays().flatMap(d=>d.items).filter(p=>typeof p.lat==='number'&&typeof p.lng==='number');
+  if(!items.length){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  whenGmapsReady(()=>{
+    if(!itinMap) itinMap=new google.maps.Map(document.getElementById('itin-map'),{zoom:12,center:items[0]});
+    itinMarkers.forEach(m=>m.setMap(null));
+    itinMarkers=plotMarkers(itinMap,items);
+  });
+}
+function setupSyncAutocomplete(){
+  const input=document.getElementById('add-place');
+  if(!input||syncPlaceAutocomplete)return;
+  whenGmapsReady(()=>{
+    syncPlaceAutocomplete=new google.maps.places.Autocomplete(input,{fields:['name','geometry','address_components']});
+    syncPlaceAutocomplete.addListener('place_changed',()=>{
+      const place=syncPlaceAutocomplete.getPlace();
+      if(!place.geometry){ syncPlacePicked=null; document.getElementById('add-place-btn').disabled=true; return; }
+      const cityComp=(place.address_components||[]).find(c=>c.types.includes('locality'))
+        ||(place.address_components||[]).find(c=>c.types.includes('administrative_area_level_2'))
+        ||(place.address_components||[]).find(c=>c.types.includes('administrative_area_level_1'));
+      syncPlacePicked={
+        name: place.name,
+        city: cityComp?cityComp.long_name:'',
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+      };
+      document.getElementById('add-place-btn').disabled=false;
+      document.getElementById('add-place-hint').textContent=`Ready to add: ${place.name}${cityComp?' · '+cityComp.long_name:''}`;
+    });
+  });
+}
 
 function persistSaved(){ saveJSON('ec_saved', saved); }
 function persistItin(){ saveJSON('ec_itinDays', itinDays); }
@@ -370,7 +457,12 @@ const BADGES={
   iconic:{label:'Iconic',bg:'#e8f4f8',color:'#1a5276'},
   restaurant:{label:'Local Food',bg:'#fce4ec',color:'#880e4f'},
   wine_bar:{label:'Wine Bar',bg:'#f3e5f5',color:'#6a1b9a'},
-  filming_location:{label:'Film Location',bg:'#e8f5e9',color:'#1b5e20'}
+  filming_location:{label:'Film Location',bg:'#e8f5e9',color:'#1b5e20'},
+  verified:{label:'Verified by You',bg:'#fff3e0',color:'#8a4b00'}
+};
+const CATEGORY_ICONS={
+  filming_location:'🐉', rooftop_bar:'🌅', market:'🛒', church:'⛪',
+  photo_spot:'📸', food_wine:'🍷', local_favorite:'🗝', other:'📍'
 };
 
 // ── API — calls our own serverless proxies ──
@@ -395,6 +487,29 @@ async function api(path, body){
   return d;
 }
 
+// ── Offline fallback: cache the last good result per city so a dead zone
+// shows stale-but-useful data instead of a blank error ──
+function resultCacheKey(kind, city, extra){ return `ec_cache_${kind}_${city.toLowerCase().trim()}${extra?'_'+extra.toLowerCase():''}`; }
+function cacheSet(key, value){ try{ localStorage.setItem(key, JSON.stringify({value, ts:Date.now()})); }catch(e){} }
+function cacheGet(key){ const c=loadJSON(key,null); return c?c.value:null; }
+function offlineNotice(ts){
+  const when = ts ? new Date(ts).toLocaleString() : 'earlier';
+  return `<div class="err" style="background:#fff8ec;border-color:var(--gold);color:#8a4b00">📡 No connection right now — showing what was last loaded (${when}).</div>`;
+}
+
+async function fetchVerifiedPlaces(city){
+  try{
+    const rows = await api('/api/get-verified-places', {city});
+    return (rows||[]).map(r=>({
+      id:'v'+r.id, name:r.name, type:'verified', icon:CATEGORY_ICONS[r.category]||'📍',
+      city:r.city, lat:r.lat, lng:r.lng,
+      short_desc:r.description||r.local_tip||'Verified by you and Janice.',
+      tags:[String(r.category||'').replace(/_/g,' ')].filter(Boolean),
+      verified:true
+    }));
+  }catch(e){ return []; }
+}
+
 // ── Tabs ──
 function showTab(id){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
@@ -405,7 +520,7 @@ function showTab(id){
   if(id==='itinerary') renderItinerary();
   if(id==='trips') renderTrips();
   if(id==='sync'){
-    if(syncSession){ showSyncActive(); startSyncPoll(); refreshSync(); }
+    if(syncSession){ showSyncActive(); startSyncPoll(); refreshSync(); setupSyncAutocomplete(); }
     else { document.getElementById('sync-create').style.display='block'; document.getElementById('sync-active').style.display='none'; }
   }
 }
@@ -423,6 +538,8 @@ async function runDiscover(){
   btn.disabled=true;btn.textContent='Searching…';
   document.getElementById('disc-results').innerHTML=loading(city);
   setTimeout(()=>{document.getElementById('disc-results').scrollIntoView({behavior:'smooth',block:'start'});},100);
+  const cacheKey=resultCacheKey('disc',city,interest);
+  const verified=await fetchVerifiedPlaces(city);
   try{
     const places=await ask(`You are an expert travel curator for ${city}. The traveler loves hidden gems, authentic local experiences, mom-and-pop restaurants, excellent wine, atmosphere, and places connected to film/TV (especially Game of Thrones).
 Interest: "${interest||'best of '+city+' — hidden gems and iconic spots'}"
@@ -437,8 +554,19 @@ Return a JSON array of exactly 6 places. Each object:
 - short_desc: 2 compelling insider sentences
 - tags: array of 2-3 short strings
 ONLY valid JSON array. No markdown.`);
-    renderCards(places,city);
-  }catch(e){showErr('disc-results','Error: '+e.message);}
+    cacheSet(cacheKey,places);
+    renderCards([...verified,...places],city);
+  }catch(e){
+    const cached=cacheGet(cacheKey);
+    if(cached){
+      renderCards([...verified,...cached],city);
+      document.getElementById('disc-results').insertAdjacentHTML('afterbegin',offlineNotice(loadJSON(cacheKey,{}).ts));
+    }else if(verified.length){
+      renderCards(verified,city);
+    }else{
+      showErr('disc-results','Error: '+e.message);
+    }
+  }
   btn.disabled=false;btn.textContent='Explore →';
   document.querySelector('nav').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -468,6 +596,7 @@ function renderCards(places,city){
     </div>`;
   });
   document.getElementById('disc-results').innerHTML=h+'</div>';
+  renderDiscMap(places);
 }
 
 function toggleSave(p){
@@ -516,6 +645,7 @@ async function runIntel(){
   const btn=document.getElementById('intel-btn');
   btn.disabled=true;btn.textContent='Loading…';
   document.getElementById('intel-results').innerHTML=loading(city);
+  const cacheKey=resultCacheKey('intel',city,month);
   try{
     const d=await ask(`Seasoned travel expert. Pre-trip intel for ${city}${month?' in '+month:''}.
 Return ONLY valid JSON:
@@ -526,29 +656,50 @@ Return ONLY valid JSON:
 - safety:{title:"Safety & Scams",icon:"🛡️",points:[4 tips]}
 ${month?`- timing:{title:"Traveling in ${month}",icon:"📅",points:[4 month-specific tips]}`:''}
 ONLY valid JSON.`);
-    const sects=['transport','culture','money','food','safety','timing'].filter(k=>d[k]);
-    let h='<div class="igrid">';
-    sects.forEach(k=>{
-      const s=d[k];
-      h+=`<div class="icard"><div class="ihd"><div class="iico">${s.icon}</div><div class="ictitle">${s.title}</div></div><ul class="ilist">${(s.points||[]).map(pt=>`<li class="ili">${pt}</li>`).join('')}</ul></div>`;
-    });
-    document.getElementById('intel-results').innerHTML=h+'</div>';
-  }catch(e){showErr('intel-results',e.message);}
+    cacheSet(cacheKey,d);
+    renderIntel(d);
+  }catch(e){
+    const cached=cacheGet(cacheKey);
+    if(cached){
+      renderIntel(cached);
+      document.getElementById('intel-results').insertAdjacentHTML('afterbegin',offlineNotice(loadJSON(cacheKey,{}).ts));
+    }else{
+      showErr('intel-results',e.message);
+    }
+  }
   btn.disabled=false;btn.textContent='Briefing →';
 }
+function renderIntel(d){
+  const sects=['transport','culture','money','food','safety','timing'].filter(k=>d[k]);
+  let h='<div class="igrid">';
+  sects.forEach(k=>{
+    const s=d[k];
+    h+=`<div class="icard"><div class="ihd"><div class="iico">${s.icon}</div><div class="ictitle">${s.title}</div></div><ul class="ilist">${(s.points||[]).map(pt=>`<li class="ili">${pt}</li>`).join('')}</ul></div>`;
+  });
+  document.getElementById('intel-results').innerHTML=h+'</div>';
+}
 
-// ── Itinerary ──
+// ── Itinerary ── (syncs through the active trip when one exists; otherwise local-only, as before)
+function inTrip(){ return !!syncSession; }
+function currentItinDays(){ return inTrip() ? (syncSession.itinDays||[]) : itinDays; }
+function currentPool(){
+  const days=currentItinDays();
+  const scheduled=days.flatMap(d=>d.items.map(i=>i.id));
+  const source = inTrip() ? (syncSession.places||[]) : Object.values(saved);
+  return source.filter(p=>!scheduled.includes(p.id));
+}
+
 function renderItinerary(){
-  const scheduled=itinDays.flatMap(d=>d.items.map(i=>i.id));
-  const pool=Object.values(saved).filter(p=>!scheduled.includes(p.id));
+  const pool=currentPool();
   document.getElementById('itin-pool').innerHTML=pool.length===0
-    ?'<span style="font-size:.77rem;color:#bbb">Save places in Discover, then drag here.</span>'
+    ?`<span style="font-size:.77rem;color:#bbb">${inTrip()?'Add places in Voyage Sync, then drag here.':'Save places in Discover, then drag here.'}</span>`
     :pool.map(p=>`<div class="pchip" draggable="true" ondragstart="dragId='${p.id}'">${p.icon} <span>${p.name}</span><span style="font-size:.68rem;color:#aaa">${p.city}</span></div>`).join('');
   renderDays();
+  renderItinMap();
 }
 function renderDays(){
   let h='';
-  itinDays.forEach(day=>{
+  currentItinDays().forEach(day=>{
     h+=`<div class="dcol" id="dc-${day.id}" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="dropDay(event,'${day.id}')">
       <div class="dhd"><div class="dlabel">${day.label}</div><button onclick="removeDay('${day.id}')" style="background:none;border:none;color:#ccc;cursor:pointer">✕</button></div>
       ${day.items.length===0?'<div class="dempty">Drop places here</div>':
@@ -558,22 +709,55 @@ function renderDays(){
   h+=`<div class="addday" onclick="addDay()">+ Add Day</div>`;
   document.getElementById('day-grid').innerHTML=h;
 }
-function dropDay(e,dayId){
+async function dropDay(e,dayId){
   e.preventDefault();document.getElementById('dc-'+dayId)?.classList.remove('over');
   if(!dragId)return;
-  const place=saved[dragId]||itinDays.flatMap(d=>d.items).find(i=>i.id===dragId);
+  const draggedId=dragId; dragId=null;
+  if(inTrip()){
+    const tripPlaceId=parseInt(draggedId.replace(/^p/,''),10);
+    const numericDayId=parseInt(dayId.replace(/^d/,''),10);
+    try{ await api('/api/trip-itinerary',{action:'assign_item',code:syncSession.code,dayId:numericDayId,tripPlaceId}); await refreshSync(); }
+    catch(err){ alert('Could not assign place: '+err.message); }
+    return;
+  }
+  const place=saved[draggedId]||itinDays.flatMap(d=>d.items).find(i=>i.id===draggedId);
   if(!place)return;
-  itinDays=itinDays.map(d=>({...d,items:d.items.filter(i=>i.id!==dragId)}));
+  itinDays=itinDays.map(d=>({...d,items:d.items.filter(i=>i.id!==draggedId)}));
   const day=itinDays.find(d=>d.id===dayId);
-  if(day&&!day.items.find(i=>i.id===dragId))day.items.push(place);
-  dragId=null;persistItin();renderItinerary();
+  if(day&&!day.items.find(i=>i.id===draggedId))day.items.push(place);
+  persistItin();renderItinerary();
 }
-function removeDayItem(dayId,pid){const d=itinDays.find(d=>d.id===dayId);if(d)d.items=d.items.filter(i=>i.id!==pid);persistItin();renderItinerary();}
-function addDay(){itinDays.push({id:'d'+Date.now(),label:'Day '+(itinDays.length+1),items:[]});persistItin();renderItinerary();}
-function removeDay(id){if(itinDays.length<=1)return;itinDays=itinDays.filter(d=>d.id!==id);persistItin();renderItinerary();}
+async function removeDayItem(dayId,pid){
+  if(inTrip()){
+    const tripPlaceId=parseInt(pid.replace(/^p/,''),10);
+    const numericDayId=parseInt(dayId.replace(/^d/,''),10);
+    try{ await api('/api/trip-itinerary',{action:'unassign_item',code:syncSession.code,dayId:numericDayId,tripPlaceId}); await refreshSync(); }
+    catch(err){ alert('Could not remove place: '+err.message); }
+    return;
+  }
+  const d=itinDays.find(d=>d.id===dayId);if(d)d.items=d.items.filter(i=>i.id!==pid);persistItin();renderItinerary();
+}
+async function addDay(){
+  if(inTrip()){
+    const label='Day '+(currentItinDays().length+1);
+    try{ await api('/api/trip-itinerary',{action:'add_day',code:syncSession.code,label}); await refreshSync(); }
+    catch(err){ alert('Could not add day: '+err.message); }
+    return;
+  }
+  itinDays.push({id:'d'+Date.now(),label:'Day '+(itinDays.length+1),items:[]});persistItin();renderItinerary();
+}
+async function removeDay(id){
+  if(inTrip()){
+    const numericDayId=parseInt(id.replace(/^d/,''),10);
+    try{ await api('/api/trip-itinerary',{action:'remove_day',code:syncSession.code,dayId:numericDayId}); await refreshSync(); }
+    catch(err){ alert('Could not remove day: '+err.message); }
+    return;
+  }
+  if(itinDays.length<=1)return;itinDays=itinDays.filter(d=>d.id!==id);persistItin();renderItinerary();
+}
 
 async function generateAI(){
-  const scheduled=itinDays.filter(d=>d.items.length);
+  const scheduled=currentItinDays().filter(d=>d.items.length);
   if(!scheduled.length){document.getElementById('ai-err').innerHTML='<div class="err">Add places to your days first.</div>';return;}
   document.getElementById('ai-err').innerHTML='';
   const btn=document.getElementById('ai-btn');btn.disabled=true;btn.textContent='Generating…';
@@ -598,7 +782,15 @@ No markdown.`);
 
 // ── Voyage Sync — now backed by real Supabase tables via /api endpoints ──
 function mapTripPlace(p){
-  return { id:'p'+p.id, name:p.name, city:p.city, icon:p.icon||'📍', addedBy:p.added_by||'Me' };
+  return { id:'p'+p.id, name:p.name, city:p.city, icon:p.icon||'📍', addedBy:p.added_by||'Me', lat:p.lat, lng:p.lng };
+}
+function buildItinDays(days, places){
+  const byId={}; places.forEach(p=>{ byId[p.id]=p; });
+  return (days||[]).map(d=>({
+    id:'d'+d.id,
+    label:d.label,
+    items:(d.trip_day_items||[]).map(it=>byId['p'+it.trip_place_id]).filter(Boolean)
+  }));
 }
 
 async function createSync(){
@@ -609,17 +801,18 @@ async function createSync(){
   const btn=event.target;btn.disabled=true;btn.textContent='Creating…';
   try{
     const trip=await api('/api/create-trip',{name});
-    syncSession={code:trip.code,name:trip.name,partner:null,places:[]};
+    syncSession={code:trip.code,name:trip.name,partner:null,places:[],itinDays:[]};
     persistSync();
     document.getElementById('code-val').textContent=trip.code;
     document.getElementById('code-box').style.display='block';
-    // Carry over any places already saved locally into the shared trip.
+    // Carry over any places already saved locally into the shared trip (with coordinates, if we have them).
     for(const p of Object.values(saved)){
-      try{ await api('/api/add-trip-place',{code:trip.code,name:p.name,city:p.city,icon:p.icon,addedBy:'Me'}); }catch(e){}
+      try{ await api('/api/add-trip-place',{code:trip.code,name:p.name,city:p.city,icon:p.icon,addedBy:'Me',lat:p.lat,lng:p.lng}); }catch(e){}
     }
     await refreshSync();
     showSyncActive();
     startSyncPoll();
+    setupSyncAutocomplete();
   }catch(e){
     document.getElementById('sync-err').innerHTML=`<div class="err">Could not create trip: ${e.message}</div>`;
   }
@@ -634,10 +827,12 @@ async function joinSync(){
   const btn=event.target;btn.disabled=true;btn.textContent='Joining…';
   try{
     const trip=await api('/api/get-trip',{code});
-    syncSession={code:trip.code,name:trip.name,partner:name,places:(trip.places||[]).map(mapTripPlace)};
+    const places=(trip.places||[]).map(mapTripPlace);
+    syncSession={code:trip.code,name:trip.name,partner:name,places,itinDays:buildItinDays(trip.days,places)};
     persistSync();
     showSyncActive();
     startSyncPoll();
+    setupSyncAutocomplete();
   }catch(e){
     document.getElementById('sync-err').innerHTML=`<div class="err">Could not join trip: ${e.message}</div>`;
   }
@@ -649,8 +844,10 @@ async function refreshSync(){
   try{
     const trip=await api('/api/get-trip',{code:syncSession.code});
     syncSession.places=(trip.places||[]).map(mapTripPlace);
+    syncSession.itinDays=buildItinDays(trip.days,syncSession.places);
     persistSync();
     renderSyncList();
+    if(document.getElementById('tab-itinerary').classList.contains('active')) renderItinerary();
   }catch(e){ /* transient — next poll retries */ }
 }
 function startSyncPoll(){
@@ -672,12 +869,16 @@ function renderSyncList(){
     :syncSession.places.map(p=>`<div class="sitem"><span style="font-size:1.2rem">${p.icon||'📍'}</span><div><div class="siname">${p.name}</div><div class="simeta">${p.city} · ${p.addedBy}</div></div></div>`).join('');
 }
 async function addToSync(){
-  const name=document.getElementById('add-place').value.trim();
-  const city=document.getElementById('add-city').value.trim();
-  if(!name||!city||!syncSession)return;
+  if(!syncPlacePicked||!syncSession)return;
   try{
-    await api('/api/add-trip-place',{code:syncSession.code,name,city,icon:'📍',addedBy:syncSession.partner||'Me'});
-    document.getElementById('add-place').value='';document.getElementById('add-city').value='';
+    await api('/api/add-trip-place',{
+      code:syncSession.code,name:syncPlacePicked.name,city:syncPlacePicked.city||'Unknown',
+      icon:'📍',addedBy:syncSession.partner||'Me',lat:syncPlacePicked.lat,lng:syncPlacePicked.lng
+    });
+    document.getElementById('add-place').value='';
+    document.getElementById('add-place-btn').disabled=true;
+    document.getElementById('add-place-hint').textContent='Pick a result from the dropdown, then Add.';
+    syncPlacePicked=null;
     await refreshSync();
   }catch(e){
     document.getElementById('sync-list').insertAdjacentHTML('beforebegin',`<div class="err">Could not add place: ${e.message}</div>`);
@@ -686,10 +887,12 @@ async function addToSync(){
 function leaveSync(){
   if(syncPoll){clearInterval(syncPoll);syncPoll=null;}
   syncSession=null;
+  syncPlacePicked=null;
   persistSync();
   document.getElementById('sync-create').style.display='block';
   document.getElementById('sync-active').style.display='none';
   document.getElementById('code-box').style.display='none';
+  renderItinMap();
 }
 function copyCode(){
   navigator.clipboard.writeText(syncSession?.code||'');
