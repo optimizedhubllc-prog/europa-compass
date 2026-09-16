@@ -20,7 +20,7 @@ export default async function handler(req) {
   const ANON_KEY = process.env.SUPABASE_ANON_KEY;
   if (!SUPABASE_URL || !ANON_KEY) return json({ error: 'Database not configured' }, 500);
 
-  const { code, name, city, icon, addedBy } = await req.json();
+  const { code, name, city, icon, addedBy, lat, lng } = await req.json();
   if (!code || !name || !city) return json({ error: 'Code, name, and city are required' }, 400);
 
   const headers = {
@@ -47,6 +47,8 @@ export default async function handler(req) {
         city,
         icon: icon || '📍',
         added_by: addedBy || 'Me',
+        lat: typeof lat === 'number' ? lat : null,
+        lng: typeof lng === 'number' ? lng : null,
       }),
     });
     if (!res.ok) throw new Error(await res.text());
