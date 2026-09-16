@@ -11,25 +11,28 @@ const ALLOWED_CATEGORIES = [
   'other'
 ];
 
-export default async function handler(req) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
-  }
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
-  const dbUrl = process.env.DATABASE_URL;
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS },
+  });
+}
+
+export default async function handler(req) {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const sharedPassword = process.env.ADD_PLACE_PASSWORD;
 
-  if (!dbUrl) {
-    return new Response(JSON.stringify({ error: 'Database not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    return json({ error: 'Database not configured' }, 500);
   }
 
   const body = await req.json();
@@ -39,54 +42,58 @@ export default async function handler(req) {
   // just enough friction to keep an unlisted form from being
   // writable by anyone who happens to find the URL.
   if (!sharedPassword || password !== sharedPassword) {
-    return new Response(JSON.stringify({ error: 'Incorrect password' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+    return json({ error: 'Incorrect password' }, 401);
   }
 
   if (!city || !category || !name) {
-    return new Response(JSON.stringify({ error: 'City, category, and name are required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+    return json({ error: 'City, category, and name are required' }, 400);
   }
 
   if (!ALLOWED_CATEGORIES.includes(category)) {
-    return new Response(JSON.stringify({ error: 'Invalid category' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+    return json({ error: 'Invalid category' }, 400);
   }
 
+  // Service-role key bypasses RLS — required here since cities/places
+  // have no public INSERT policy (only this password-gated endpoint
+  // is allowed to write to them).
+  const headers = {
+    apikey: SERVICE_KEY,
+    Authorization: `Bearer ${SERVICE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
   try {
-    const { neon } = await import('@neondatabase/serverless');
-    const sql = neon(dbUrl);
+    // Upsert the city — mirrors the old ON CONFLICT (name, country) logic.
+    const cityRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cities?on_conflict=name,country`,
+      {
+        method: 'POST',
+        headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify({ name: city, country: country || 'Unknown' }),
+      }
+    );
+    if (!cityRes.ok) throw new Error(await cityRes.text());
+    const [cityRow] = await cityRes.json();
 
-    // Find or create the city. ON CONFLICT handles the case where
-    // the city already exists (matches the UNIQUE(name, country)
-    // constraint from the schema) without erroring.
-    const cityRows = await sql`
-      INSERT INTO cities (name, country)
-      VALUES (${city}, ${country || 'Unknown'})
-      ON CONFLICT (name, country) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-    `;
-    const cityId = cityRows[0].id;
-
-    await sql`
-      INSERT INTO places (city_id, category, name, description, local_tip, address, source, verified)
-      VALUES (${cityId}, ${category}, ${name}, ${description || null}, ${localTip || null}, ${address || null}, 'pedro_janice_verified', true)
-    `;
-
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    const placeRes = await fetch(`${SUPABASE_URL}/rest/v1/places`, {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        city_id: cityRow.id,
+        category,
+        name,
+        description: description || null,
+        local_tip: localTip || null,
+        address: address || null,
+        source: 'pedro_janice_verified',
+        verified: true,
+      }),
     });
+    if (!placeRes.ok) throw new Error(await placeRes.text());
+
+    return json({ success: true });
   } catch (err) {
     console.error('Database write failed:', err);
-    return new Response(JSON.stringify({ error: 'Failed to save place' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+    return json({ error: 'Failed to save place' }, 500);
   }
 }
