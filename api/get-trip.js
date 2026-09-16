@@ -41,7 +41,14 @@ export default async function handler(req) {
     if (!placesRes.ok) throw new Error(await placesRes.text());
     const places = await placesRes.json();
 
-    return json({ code: trip.code, name: trip.name, places });
+    const daysRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/trip_days?trip_id=eq.${trip.id}&select=*,trip_day_items(trip_place_id)&order=sort_order.asc`,
+      { headers }
+    );
+    if (!daysRes.ok) throw new Error(await daysRes.text());
+    const days = await daysRes.json();
+
+    return json({ code: trip.code, name: trip.name, places, days });
   } catch (err) {
     console.error('Get trip failed:', err);
     return json({ error: 'Failed to load trip' }, 500);
