@@ -124,6 +124,7 @@
   .scsub{font-size:.77rem;color:#888;margin-bottom:13px;line-height:1.5;}
   .syncbtn{width:100%;background:var(--blue);color:white;border:none;border-radius:8px;padding:10px;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;margin-top:3px;}
   .syncbtn.sec{background:white;color:var(--blue);border:1.5px solid var(--blue);}
+  .syncbtn:disabled{opacity:.6;cursor:not-allowed;}
   .codebox{background:#f5f0e8;border-radius:9px;padding:16px;text-align:center;margin-top:11px;}
   .codeval{font-family:monospace;font-size:1.8rem;font-weight:700;color:var(--blue);letter-spacing:.2em;}
   .codelbl{font-size:.68rem;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-top:3px;}
@@ -290,6 +291,7 @@
           <button class="syncbtn sec" onclick="joinSync()">Join Trip</button>
         </div>
       </div>
+      <div id="sync-err"></div>
     </div>
     <div id="sync-active" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
@@ -340,11 +342,28 @@
 </div>
 
 <script>
-// ── State ──
-let saved={};
-let itinDays=[{id:'d1',label:'Day 1',items:[]},{id:'d2',label:'Day 2',items:[]}];
+// ── Persistence helpers ──
+function loadJSON(key, fallback){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch(e){ return fallback; }
+}
+function saveJSON(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){}
+}
+
+// ── State (restored from localStorage where available) ──
+let saved = loadJSON('ec_saved', {});
+let itinDays = loadJSON('ec_itinDays', [{id:'d1',label:'Day 1',items:[]},{id:'d2',label:'Day 2',items:[]}]);
 let dragId=null;
-let syncSession=null;
+let syncSession = loadJSON('ec_syncSession', null); // {code,name,partner,places}
+let syncPoll = null;
+
+function persistSaved(){ saveJSON('ec_saved', saved); }
+function persistItin(){ saveJSON('ec_itinDays', itinDays); }
+function persistSync(){
+  if (syncSession) saveJSON('ec_syncSession', syncSession);
+  else { try{ localStorage.removeItem('ec_syncSession'); }catch(e){} }
+}
 
 const BADGES={
   hidden_gem:{label:'Hidden Gem',bg:'#fef3cd',color:'#7d5a00'},
@@ -354,7 +373,7 @@ const BADGES={
   filming_location:{label:'Film Location',bg:'#e8f5e9',color:'#1b5e20'}
 };
 
-// ── API — calls our own serverless proxy ──
+// ── API — calls our own serverless proxies ──
 async function ask(prompt,maxTokens=1200){
   const r=await fetch('/api/ask',{
     method:'POST',
@@ -364,6 +383,16 @@ async function ask(prompt,maxTokens=1200){
   const d=await r.json();
   if(d.error) throw new Error(d.error);
   return JSON.parse(d.text.replace(/```json|```/g,'').trim());
+}
+async function api(path, body){
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body || {})
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d;
 }
 
 // ── Tabs ──
@@ -375,6 +404,10 @@ function showTab(id){
   });
   if(id==='itinerary') renderItinerary();
   if(id==='trips') renderTrips();
+  if(id==='sync'){
+    if(syncSession){ showSyncActive(); startSyncPoll(); refreshSync(); }
+    else { document.getElementById('sync-create').style.display='block'; document.getElementById('sync-active').style.display='none'; }
+  }
 }
 
 // ── Discover ──
@@ -389,7 +422,6 @@ async function runDiscover(){
   const btn=document.getElementById('disc-btn');
   btn.disabled=true;btn.textContent='Searching…';
   document.getElementById('disc-results').innerHTML=loading(city);
-  // Scroll to results on mobile
   setTimeout(()=>{document.getElementById('disc-results').scrollIntoView({behavior:'smooth',block:'start'});},100);
   try{
     const places=await ask(`You are an expert travel curator for ${city}. The traveler loves hidden gems, authentic local experiences, mom-and-pop restaurants, excellent wine, atmosphere, and places connected to film/TV (especially Game of Thrones).
@@ -407,9 +439,7 @@ Return a JSON array of exactly 6 places. Each object:
 ONLY valid JSON array. No markdown.`);
     renderCards(places,city);
   }catch(e){showErr('disc-results','Error: '+e.message);}
-  // Always re-enable button no matter what
   btn.disabled=false;btn.textContent='Explore →';
-  // Scroll nav back into view so user can search again
   document.querySelector('nav').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -442,11 +472,12 @@ function renderCards(places,city){
 
 function toggleSave(p){
   if(saved[p.id])delete saved[p.id];else saved[p.id]=p;
+  persistSaved();
   const btn=document.getElementById('sv-'+p.id);
   if(btn){btn.classList.toggle('saved',!!saved[p.id]);btn.textContent=saved[p.id]?'✓ Saved':'+ Save';}
 }
 
-function addToItin(p){if(!saved[p.id])saved[p.id]=p;showTab('itinerary');}
+function addToItin(p){if(!saved[p.id]){saved[p.id]=p;persistSaved();}showTab('itinerary');}
 
 async function openDetail(p){
   document.getElementById('m-icon').textContent=p.icon;
@@ -535,11 +566,11 @@ function dropDay(e,dayId){
   itinDays=itinDays.map(d=>({...d,items:d.items.filter(i=>i.id!==dragId)}));
   const day=itinDays.find(d=>d.id===dayId);
   if(day&&!day.items.find(i=>i.id===dragId))day.items.push(place);
-  dragId=null;renderItinerary();
+  dragId=null;persistItin();renderItinerary();
 }
-function removeDayItem(dayId,pid){const d=itinDays.find(d=>d.id===dayId);if(d)d.items=d.items.filter(i=>i.id!==pid);renderItinerary();}
-function addDay(){itinDays.push({id:'d'+Date.now(),label:'Day '+(itinDays.length+1),items:[]});renderItinerary();}
-function removeDay(id){if(itinDays.length<=1)return;itinDays=itinDays.filter(d=>d.id!==id);renderItinerary();}
+function removeDayItem(dayId,pid){const d=itinDays.find(d=>d.id===dayId);if(d)d.items=d.items.filter(i=>i.id!==pid);persistItin();renderItinerary();}
+function addDay(){itinDays.push({id:'d'+Date.now(),label:'Day '+(itinDays.length+1),items:[]});persistItin();renderItinerary();}
+function removeDay(id){if(itinDays.length<=1)return;itinDays=itinDays.filter(d=>d.id!==id);persistItin();renderItinerary();}
 
 async function generateAI(){
   const scheduled=itinDays.filter(d=>d.items.length);
@@ -565,23 +596,68 @@ No markdown.`);
   btn.disabled=false;btn.textContent='✦ AI Schedule';
 }
 
-// ── Voyage Sync ──
-function createSync(){
-  const name=document.getElementById('sync-name').value.trim();
-  if(!name)return;
-  const code=Math.random().toString(36).substring(2,8).toUpperCase();
-  document.getElementById('code-val').textContent=code;
-  document.getElementById('code-box').style.display='block';
-  syncSession={code,name,partner:null,places:Object.values(saved).map(p=>({...p,addedBy:'Me'}))};
-  showSyncActive();
+// ── Voyage Sync — now backed by real Supabase tables via /api endpoints ──
+function mapTripPlace(p){
+  return { id:'p'+p.id, name:p.name, city:p.city, icon:p.icon||'📍', addedBy:p.added_by||'Me' };
 }
-function joinSync(){
+
+async function createSync(){
+  const nameInput=document.getElementById('sync-name');
+  const name=nameInput.value.trim();
+  if(!name)return;
+  document.getElementById('sync-err').innerHTML='';
+  const btn=event.target;btn.disabled=true;btn.textContent='Creating…';
+  try{
+    const trip=await api('/api/create-trip',{name});
+    syncSession={code:trip.code,name:trip.name,partner:null,places:[]};
+    persistSync();
+    document.getElementById('code-val').textContent=trip.code;
+    document.getElementById('code-box').style.display='block';
+    // Carry over any places already saved locally into the shared trip.
+    for(const p of Object.values(saved)){
+      try{ await api('/api/add-trip-place',{code:trip.code,name:p.name,city:p.city,icon:p.icon,addedBy:'Me'}); }catch(e){}
+    }
+    await refreshSync();
+    showSyncActive();
+    startSyncPoll();
+  }catch(e){
+    document.getElementById('sync-err').innerHTML=`<div class="err">Could not create trip: ${e.message}</div>`;
+  }
+  btn.disabled=false;btn.textContent='Generate Trip Code';
+}
+
+async function joinSync(){
   const code=document.getElementById('join-code').value.trim().toUpperCase();
   const name=document.getElementById('join-name').value.trim();
   if(!code||!name)return;
-  syncSession={code,name:code+' Trip',partner:name,places:[]};
-  showSyncActive();
+  document.getElementById('sync-err').innerHTML='';
+  const btn=event.target;btn.disabled=true;btn.textContent='Joining…';
+  try{
+    const trip=await api('/api/get-trip',{code});
+    syncSession={code:trip.code,name:trip.name,partner:name,places:(trip.places||[]).map(mapTripPlace)};
+    persistSync();
+    showSyncActive();
+    startSyncPoll();
+  }catch(e){
+    document.getElementById('sync-err').innerHTML=`<div class="err">Could not join trip: ${e.message}</div>`;
+  }
+  btn.disabled=false;btn.textContent='Join Trip';
 }
+
+async function refreshSync(){
+  if(!syncSession)return;
+  try{
+    const trip=await api('/api/get-trip',{code:syncSession.code});
+    syncSession.places=(trip.places||[]).map(mapTripPlace);
+    persistSync();
+    renderSyncList();
+  }catch(e){ /* transient — next poll retries */ }
+}
+function startSyncPoll(){
+  if(syncPoll)clearInterval(syncPoll);
+  syncPoll=setInterval(refreshSync,6000); // simple polling; fine for a two-person trip
+}
+
 function showSyncActive(){
   document.getElementById('sync-create').style.display='none';
   document.getElementById('sync-active').style.display='block';
@@ -595,18 +671,25 @@ function renderSyncList(){
     ?'<div style="color:#bbb;font-size:.82rem;text-align:center;padding:18px">No places added yet.</div>'
     :syncSession.places.map(p=>`<div class="sitem"><span style="font-size:1.2rem">${p.icon||'📍'}</span><div><div class="siname">${p.name}</div><div class="simeta">${p.city} · ${p.addedBy}</div></div></div>`).join('');
 }
-function addToSync(){
+async function addToSync(){
   const name=document.getElementById('add-place').value.trim();
   const city=document.getElementById('add-city').value.trim();
   if(!name||!city||!syncSession)return;
-  syncSession.places.push({id:'m'+Date.now(),name,city,icon:'📍',addedBy:syncSession.partner||'Me'});
-  document.getElementById('add-place').value='';document.getElementById('add-city').value='';
-  renderSyncList();
+  try{
+    await api('/api/add-trip-place',{code:syncSession.code,name,city,icon:'📍',addedBy:syncSession.partner||'Me'});
+    document.getElementById('add-place').value='';document.getElementById('add-city').value='';
+    await refreshSync();
+  }catch(e){
+    document.getElementById('sync-list').insertAdjacentHTML('beforebegin',`<div class="err">Could not add place: ${e.message}</div>`);
+  }
 }
 function leaveSync(){
+  if(syncPoll){clearInterval(syncPoll);syncPoll=null;}
   syncSession=null;
+  persistSync();
   document.getElementById('sync-create').style.display='block';
   document.getElementById('sync-active').style.display='none';
+  document.getElementById('code-box').style.display='none';
 }
 function copyCode(){
   navigator.clipboard.writeText(syncSession?.code||'');
@@ -634,7 +717,7 @@ function renderTrips(){
       </div>
     </div>`).join('');
 }
-function clearCity(city){Object.keys(saved).forEach(id=>{if(saved[id].city===city)delete saved[id];});renderTrips();}
+function clearCity(city){Object.keys(saved).forEach(id=>{if(saved[id].city===city)delete saved[id];});persistSaved();renderTrips();}
 
 document.getElementById('city-in').addEventListener('keydown',e=>{if(e.key==='Enter')runDiscover();});
 document.getElementById('interest-in').addEventListener('keydown',e=>{if(e.key==='Enter')runDiscover();});
