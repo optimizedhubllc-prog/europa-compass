@@ -474,7 +474,10 @@ async function ask(prompt,maxTokens=1200){
   });
   const d=await r.json();
   if(d.error) throw new Error(d.error);
-  return JSON.parse(d.text.replace(/```json|```/g,'').trim());
+  const raw=d.text.replace(/```json|```/g,'').trim();
+  const match=raw.match(/\{[\s\S]*\}/);
+  if(!match) throw new Error('AI response was not valid JSON — try again');
+  return JSON.parse(match[0]);
 }
 async function api(path, body){
   const r = await fetch(path, {
@@ -655,7 +658,7 @@ Return ONLY valid JSON:
 - food:{title:"Food & Drink Scene",icon:"🍷",points:[5 bullets]}
 - safety:{title:"Safety & Scams",icon:"🛡️",points:[4 tips]}
 ${month?`- timing:{title:"Traveling in ${month}",icon:"📅",points:[4 month-specific tips]}`:''}
-ONLY valid JSON.`);
+ONLY valid JSON.`, 2500);
     cacheSet(cacheKey,d);
     renderIntel(d);
   }catch(e){
