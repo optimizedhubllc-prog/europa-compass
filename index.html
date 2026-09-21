@@ -478,12 +478,30 @@ async function ask(prompt,maxTokens=1200){
   if(d.error) throw new Error(d.error);
   const raw=d.text.replace(/```json|```/g,'').trim();
   const match=raw.match(/\{[\s\S]*\}/);
-  if(!match) throw new Error('AI response was cut off — try again');
+  if(!match){
+    if(d.stop_reason==='max_tokens') throw new Error('Response was cut off — ran out of token budget. Try again.');
+    throw new Error('AI response was not valid JSON — try again');
+  }
   try{
     return JSON.parse(match[0]);
   }catch(e){
-    throw new Error('AI response was cut off mid-way — try again');
+    if(d.stop_reason==='max_tokens') throw new Error('Response was cut off mid-way — ran out of token budget. Try again.');
+    throw new Error('AI response had malformed JSON — try again');
   }
+}
+// Forces the model through a tool call so the API itself guarantees valid,
+// schema-conforming JSON — no text-scraping, no quote-escaping failures.
+async function askJSON(prompt,schema,maxTokens=1200){
+  const r=await fetch('/api/ask',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({prompt,maxTokens,schema})
+  });
+  const d=await r.json();
+  if(d.error) throw new Error(d.error);
+  if(d.stop_reason==='max_tokens') throw new Error('Response was cut off — ran out of token budget. Try again.');
+  if(!d.data) throw new Error('AI did not return the expected data — try again');
+  return d.data;
 }
 async function api(path, body){
   const r = await fetch(path, {
@@ -655,16 +673,24 @@ async function runIntel(){
   btn.disabled=true;btn.textContent='Loading…';
   document.getElementById('intel-results').innerHTML=loading(city);
   const cacheKey=resultCacheKey('intel',city,month);
+  const sectionSchema={type:'object',properties:{title:{type:'string'},icon:{type:'string'},points:{type:'array',items:{type:'string'}}},required:['title','icon','points']};
+  const intelSchema={
+    type:'object',
+    properties:{
+      transport:sectionSchema, culture:sectionSchema, money:sectionSchema,
+      food:sectionSchema, safety:sectionSchema, ...(month?{timing:sectionSchema}:{})
+    },
+    required:['transport','culture','money','food','safety',...(month?['timing']:[])]
+  };
   try{
-    const d=await ask(`Seasoned travel expert. Pre-trip intel for ${city}${month?' in '+month:''}.
-Return ONLY valid JSON:
-- transport:{title:"Getting Around",icon:"🚇",points:[5 specific bullets]}
-- culture:{title:"Culture & Etiquette",icon:"🎭",points:[4 bullets]}
-- money:{title:"Money & Budget",icon:"💶",points:[4 bullets]}
-- food:{title:"Food & Drink Scene",icon:"🍷",points:[5 bullets]}
-- safety:{title:"Safety & Scams",icon:"🛡️",points:[4 tips]}
-${month?`- timing:{title:"Traveling in ${month}",icon:"📅",points:[4 month-specific tips]}`:''}
-ONLY valid JSON.`, 4000);
+    const d=await askJSON(`Seasoned travel expert. Pre-trip intel for ${city}${month?' in '+month:''}.
+Provide:
+- transport: "Getting Around" (🚇) — 5 specific bullets
+- culture: "Culture & Etiquette" (🎭) — 4 bullets
+- money: "Money & Budget" (💶) — 4 bullets
+- food: "Food & Drink Scene" (🍷) — 5 bullets
+- safety: "Safety & Scams" (🛡️) — 4 tips
+${month?`- timing: "Traveling in ${month}" (📅) — 4 month-specific tips`:''}`, intelSchema, 4000);
     cacheSet(cacheKey,d);
     renderIntel(d);
   }catch(e){
