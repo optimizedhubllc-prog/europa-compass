@@ -478,8 +478,12 @@ async function ask(prompt,maxTokens=1200){
   if(d.error) throw new Error(d.error);
   const raw=d.text.replace(/```json|```/g,'').trim();
   const match=raw.match(/\{[\s\S]*\}/);
-  if(!match) throw new Error('AI response was not valid JSON — try again');
-  return JSON.parse(match[0]);
+  if(!match) throw new Error('AI response was cut off — try again');
+  try{
+    return JSON.parse(match[0]);
+  }catch(e){
+    throw new Error('AI response was cut off mid-way — try again');
+  }
 }
 async function api(path, body){
   const r = await fetch(path, {
@@ -660,7 +664,7 @@ Return ONLY valid JSON:
 - food:{title:"Food & Drink Scene",icon:"🍷",points:[5 bullets]}
 - safety:{title:"Safety & Scams",icon:"🛡️",points:[4 tips]}
 ${month?`- timing:{title:"Traveling in ${month}",icon:"📅",points:[4 month-specific tips]}`:''}
-ONLY valid JSON.`, 2500);
+ONLY valid JSON.`, 4000);
     cacheSet(cacheKey,d);
     renderIntel(d);
   }catch(e){
