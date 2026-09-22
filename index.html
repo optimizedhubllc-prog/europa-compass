@@ -564,7 +564,8 @@ async function ask(prompt,maxTokens=1200){
   const d=await r.json();
   if(d.error) throw new Error(d.error);
   const raw=d.text.replace(/```json|```/g,'').trim();
-  const match=raw.match(/\{[\s\S]*\}/);
+  const isArray = raw.trimStart().startsWith('[');
+  const match=raw.match(isArray ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/);
   if(!match){
     if(d.stop_reason==='max_tokens') throw new Error('Response was cut off — ran out of token budget. Try again.');
     throw new Error('AI response was not valid JSON — try again');
