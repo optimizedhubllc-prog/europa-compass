@@ -156,6 +156,31 @@
     #city-in{width:100%;border-right:none;border-bottom:1px solid var(--mist);}
   }
 
+  .pts-subhead{font-family:'Cormorant Garamond',serif;font-size:1.15rem;font-weight:600;margin:26px 0 12px;}
+  .pts-frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .pts-full{grid-column:1/-1;}
+  .pts-route-row{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:16px 18px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+  .pts-route-name{font-family:'Cormorant Garamond',serif;font-size:1.05rem;font-weight:600;}
+  .pts-route-owner{font-size:.72rem;color:var(--slate);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;}
+  .pts-ratio{font-family:'Inter',sans-serif;font-weight:600;font-size:.82rem;color:var(--terracotta);background:#fdf1ea;border:1px solid #f0d9c8;border-radius:20px;padding:5px 13px;white-space:nowrap;}
+  .pts-result{display:none;margin-top:14px;}
+  .pts-result.show{display:block;}
+  .pts-rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .pts-opt{background:var(--parchment);border-radius:9px;padding:12px 10px;text-align:center;}
+  .pts-opt.best{background:#fdf1ea;border:1px solid var(--gold);}
+  .pts-opt-label{font-size:.63rem;color:var(--slate);text-transform:uppercase;letter-spacing:.08em;}
+  .pts-opt-value{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;margin-top:3px;color:var(--deep);}
+  .pts-opt.best .pts-opt-value{color:var(--terracotta);}
+  .pts-verdict{margin-top:14px;padding:14px 16px;border-radius:9px;font-size:.85rem;line-height:1.6;border-left:3px solid var(--terracotta);background:#fdf6f0;}
+  .pts-verdict.bad{border-left-color:var(--slate);background:var(--parchment);}
+  .pts-verdict b{color:var(--terracotta);}
+  .pts-verdict.bad b{color:var(--slate);}
+  .pts-bonus-box{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:16px 18px;font-size:.83rem;line-height:1.7;color:var(--slate);white-space:pre-line;}
+  .pts-bonus-meta{font-size:.68rem;color:#aaa;text-transform:uppercase;letter-spacing:.08em;margin-top:8px;}
+  .pts-spin{display:inline-block;animation:spin 1.6s linear infinite;}
+
+  @media(max-width:560px){.pts-frow{grid-template-columns:1fr;}.pts-rgrid{grid-template-columns:1fr;}}
+
   .map-wrap{margin-top:22px;border-radius:12px;overflow:hidden;border:.5px solid #e0dbd4;}
   #disc-map,#itin-map{width:100%;height:340px;}
   .map-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:600;padding:10px 14px;background:#faf7f2;border-bottom:.5px solid var(--mist);}
@@ -172,6 +197,7 @@
     <button class="tab" onclick="showTab('itinerary')">Itinerary</button>
     <button class="tab" onclick="showTab('sync')">Voyage Sync</button>
     <button class="tab" onclick="showTab('trips')">My Trips</button>
+    <button class="tab" onclick="showTab('points')">Points</button>
   </div>
 </nav>
 
@@ -347,6 +373,62 @@
       </div>
     </div>
     <div class="tgrid" id="trips-grid"></div>
+  </div>
+</div>
+
+<!-- HOTEL POINTS -->
+<div id="tab-points" class="panel">
+  <div class="sw">
+    <div class="seye">Hotel Points</div>
+    <h2 class="stitle" style="margin-bottom:8px">Hotel Points Router</h2>
+    <p style="font-size:.85rem;color:var(--slate);line-height:1.6;margin-bottom:22px;max-width:52ch">Find which card reaches a hotel's loyalty program, then check if the transfer is actually worth it. Nothing here is saved or stored — it's recalculated fresh each time.</p>
+
+    <div class="pts-subhead">Which card reaches this hotel?</div>
+    <div class="fcard">
+      <div class="fg">
+        <label class="flabel">Hotel's Loyalty Program</label>
+        <select id="ptsHotelProgram" onchange="renderPtsRoutes()"></select>
+      </div>
+    </div>
+    <div id="ptsRouteResults"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 10px;">
+      <div class="pts-subhead" style="margin:0">Any active bonus right now?</div>
+      <button class="sbtn" id="ptsBonusBtn" onclick="checkPtsBonuses()">Check Live →</button>
+    </div>
+    <div id="ptsBonusResult"></div>
+
+    <div class="pts-subhead">Is the transfer worth it?</div>
+    <div class="fcard">
+      <div class="pts-frow">
+        <div class="fg">
+          <label class="flabel">Cash Price / Night ($)</label>
+          <input type="number" id="ptsCash" placeholder="240" min="0">
+        </div>
+        <div class="fg">
+          <label class="flabel">Award Cost / Night (pts)</label>
+          <input type="number" id="ptsPoints" placeholder="12000" min="0">
+        </div>
+        <div class="fg pts-full">
+          <label class="flabel">Transfer From</label>
+          <select id="ptsCard"></select>
+        </div>
+        <div class="fg pts-full">
+          <label class="flabel">Your Target Value (¢/point)</label>
+          <input type="number" id="ptsTarget" step="0.1" placeholder="1.5" min="0">
+        </div>
+      </div>
+    </div>
+    <div class="pts-result" id="ptsResult">
+      <div class="pts-rgrid" id="ptsResultRow"></div>
+      <div class="pts-verdict" id="ptsResultVerdict"></div>
+    </div>
+
+    <div style="margin-top:34px;padding-top:16px;border-top:.5px solid var(--mist);font-size:.72rem;color:#9a9186;line-height:1.7;">
+      Transfer ratios reflect what was current when this was built — banks change these without much
+      notice (new partners, devalued ratios, one-off bonuses), so re-check the program's transfer page
+      before moving points, especially for a large redemption. Transfers are almost always one-way.
+    </div>
   </div>
 </div>
 
@@ -552,10 +634,11 @@ function showTab(id){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   document.querySelectorAll('.tab').forEach((b,i)=>{
-    b.classList.toggle('active',['discover','intel','itinerary','sync','trips'][i]===id);
+    b.classList.toggle('active',['discover','intel','itinerary','sync','trips','points'][i]===id);
   });
   if(id==='itinerary') renderItinerary();
   if(id==='trips') renderTrips();
+  if(id==='points') initPtsPanel();
   if(id==='sync'){
     if(syncSession){ showSyncActive(); startSyncPoll(); refreshSync(); setupSyncAutocomplete(); }
     else { document.getElementById('sync-create').style.display='block'; document.getElementById('sync-active').style.display='none'; }
@@ -969,6 +1052,122 @@ function clearCity(city){Object.keys(saved).forEach(id=>{if(saved[id].city===cit
 
 document.getElementById('city-in').addEventListener('keydown',e=>{if(e.key==='Enter')runDiscover();});
 document.getElementById('interest-in').addEventListener('keydown',e=>{if(e.key==='Enter')runDiscover();});
+
+// ── Hotel Points Router ──
+const PTS_CARDS = {
+  csr:    { name: 'Chase Sapphire Reserve', owner: 'Janice' },
+  chase2: { name: 'Chase (other card)',     owner: 'Janice' },
+  biltJ:  { name: 'Bilt',                   owner: 'Janice' },
+  biltP:  { name: 'Bilt',                   owner: 'Pedro' },
+  ventx:  { name: 'Capital One Venture X',  owner: 'Pedro' },
+};
+const PTS_HOTEL_PROGRAMS = {
+  hyatt:    { name: 'World of Hyatt',              routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 } ] },
+  marriott: { name: 'Marriott Bonvoy',             routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 } ] },
+  ihg:      { name: 'IHG One Rewards',             routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 } ] },
+  hilton:   { name: 'Hilton Honors',               routes: [ { card:'biltJ', per: 1 },  { card:'biltP', per: 1 } ] },
+  wyndham:  { name: 'Wyndham Rewards',             routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 }, { card:'ventx', per: 1 } ] },
+  accor:    { name: 'Accor Live Limitless',        routes: [ { card:'biltJ', per: 1.5 },{ card:'biltP', per: 1.5 },  { card:'ventx', per: 2 } ] },
+  iprefer:  { name: 'I Prefer / Preferred Hotels', routes: [ { card:'biltJ', per: 0.5 }, { card:'biltP', per: 0.5 }, { card:'ventx', per: 0.5 } ] },
+  choice:   { name: 'Choice Privileges',           routes: [ { card:'ventx', per: 1 } ] },
+  other:    { name: 'Not sure / independent hotel — no transfer route', routes: [] },
+};
+let ptsInitialized = false;
+
+function initPtsPanel(){
+  if (ptsInitialized) return;
+  ptsInitialized = true;
+  const sel = document.getElementById('ptsHotelProgram');
+  sel.innerHTML = Object.entries(PTS_HOTEL_PROGRAMS).map(([key, p]) => `<option value="${key}">${p.name}</option>`).join('');
+  renderPtsRoutes();
+  ['ptsCash', 'ptsPoints', 'ptsCard', 'ptsTarget'].forEach(id => {
+    document.getElementById(id).addEventListener('input', runPtsCalc);
+  });
+}
+
+function renderPtsRoutes(){
+  const key = document.getElementById('ptsHotelProgram').value;
+  const program = PTS_HOTEL_PROGRAMS[key];
+  const el = document.getElementById('ptsRouteResults');
+  if (!program.routes.length) {
+    el.innerHTML = `<div class="pts-verdict bad">No transfer route from your cards to this program. You'd pay cash or earn directly with the hotel.</div>`;
+  } else {
+    el.innerHTML = program.routes.map(r => {
+      const card = PTS_CARDS[r.card];
+      const ratioText = r.per === 1 ? '1 : 1' : (r.per < 1 ? `1 : ${(1/r.per).toFixed(1)}` : `${r.per} : 1`);
+      return `
+        <div class="pts-route-row">
+          <div>
+            <div class="pts-route-name">${card.name}</div>
+            <div class="pts-route-owner">${card.owner}</div>
+          </div>
+          <div class="pts-ratio">${ratioText}</div>
+        </div>`;
+    }).join('');
+  }
+  populatePtsCardSelect();
+}
+
+function populatePtsCardSelect(){
+  const key = document.getElementById('ptsHotelProgram').value;
+  const program = PTS_HOTEL_PROGRAMS[key];
+  const sel = document.getElementById('ptsCard');
+  const currentVal = sel.value;
+  const eligible = program.routes.length
+    ? program.routes.map(r => ({ card: PTS_CARDS[r.card], id: r.card, per: r.per }))
+    : Object.entries(PTS_CARDS).map(([id, c]) => ({ card: c, id, per: 1 }));
+  sel.innerHTML = eligible.map(r => `<option value="${r.id}" data-per="${r.per}">${r.card.name} (${r.card.owner})</option>`).join('');
+  if (currentVal && eligible.some(r => r.id === currentVal)) sel.value = currentVal;
+  runPtsCalc();
+}
+
+function fmtPtsUSD(n){ return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+
+async function checkPtsBonuses(){
+  const btn = document.getElementById('ptsBonusBtn');
+  const el = document.getElementById('ptsBonusResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="pts-spin">🧭</span> Checking…';
+  el.innerHTML = '';
+  try {
+    const r = await fetch('/api/check-bonuses', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    el.innerHTML = `<div class="pts-bonus-box">${d.text}</div><div class="pts-bonus-meta">Checked live just now — re-check before transferring for anything time-sensitive.</div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="pts-verdict bad"><b>Couldn't check right now.</b> ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Check Live →';
+}
+
+function runPtsCalc(){
+  const cash = parseFloat(document.getElementById('ptsCash').value) || 0;
+  const awardPoints = parseFloat(document.getElementById('ptsPoints').value) || 0;
+  const cardSel = document.getElementById('ptsCard');
+  const per = parseFloat(cardSel.selectedOptions[0]?.dataset.per || '1');
+  const cardName = cardSel.selectedOptions[0]?.textContent || '';
+  const target = parseFloat(document.getElementById('ptsTarget').value) || 1.5;
+
+  const resultEl = document.getElementById('ptsResult');
+  if (awardPoints <= 0 || cash <= 0) { resultEl.classList.remove('show'); return; }
+  resultEl.classList.add('show');
+
+  const nativeNeeded = awardPoints * per;
+  const achievedCpp = (cash * 100) / nativeNeeded;
+  const good = achievedCpp >= target;
+
+  document.getElementById('ptsResultRow').innerHTML = `
+    <div class="pts-opt"><div class="pts-opt-label">Cash / Night</div><div class="pts-opt-value">${fmtPtsUSD(cash)}</div></div>
+    <div class="pts-opt"><div class="pts-opt-label">Points Needed</div><div class="pts-opt-value">${Math.round(nativeNeeded).toLocaleString()}</div></div>
+    <div class="pts-opt ${good ? 'best' : ''}"><div class="pts-opt-label">Value</div><div class="pts-opt-value">${achievedCpp.toFixed(2)}¢</div></div>
+  `;
+  const verdictEl = document.getElementById('ptsResultVerdict');
+  verdictEl.className = 'pts-verdict' + (good ? '' : ' bad');
+  verdictEl.innerHTML = good
+    ? `<b>Good redemption.</b> ${achievedCpp.toFixed(2)}¢/point from ${cardName.split(' (')[0]} clears your ${target.toFixed(1)}¢ target — worth transferring.`
+    : `<b>Below your target.</b> Only ${achievedCpp.toFixed(2)}¢/point, under your ${target.toFixed(1)}¢ bar. Pay cash and save these points for a redemption that clears it.`;
+}
 </script>
 </body>
 </html>
