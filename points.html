@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Points Router — Europa Compass</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏨</text></svg>">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
+  :root{--ink:#1a1614;--parchment:#f7f3ec;--warm-white:#fdfaf6;--terracotta:#c05a2e;--gold:#b8922a;--slate:#4a4540;--mist:#e8e2d9;--deep:#2c1f1a;--blue:#2c4a6b;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:var(--warm-white);color:var(--ink);min-height:100vh;}
+
+  nav{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--deep);position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(184,146,42,.3);flex-wrap:wrap;gap:8px;}
+  .logo{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:600;color:var(--parchment);letter-spacing:.04em;text-decoration:none;}
+  .logo em{color:var(--gold);font-style:italic;}
+  .back{padding:6px 12px;border:none;background:rgba(255,255,255,.06);color:rgba(247,243,236,.8);font-size:.7rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;border-radius:5px;text-decoration:none;}
+  .back:hover{background:rgba(255,255,255,.12);}
+
+  .sw{max-width:840px;margin:0 auto;padding:38px 20px 60px;}
+  .seye{font-size:.67rem;letter-spacing:.2em;text-transform:uppercase;color:var(--terracotta);font-weight:600;margin-bottom:7px;}
+  .stitle{font-family:'Cormorant Garamond',serif;font-size:1.85rem;font-weight:300;margin-bottom:8px;line-height:1.2;}
+  .ssub{font-size:.85rem;color:var(--slate);line-height:1.6;margin-bottom:22px;max-width:52ch;}
+
+  .rt{font-family:'Cormorant Garamond',serif;font-size:1.15rem;font-weight:600;margin:26px 0 12px;}
+
+  .fcard{background:white;border-radius:12px;border:.5px solid #e0dbd4;padding:20px;margin-bottom:18px;}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .frow.two{grid-template-columns:1fr 1fr;}
+  .fg{display:flex;flex-direction:column;gap:4px;}
+  .fg.full{grid-column:1/-1;}
+  .flabel{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--slate);font-weight:600;}
+  select,input[type="number"],input[type="text"]{
+    font-family:'Inter',sans-serif;font-size:.86rem;color:var(--ink);
+    background:var(--warm-white);border:1px solid var(--mist);border-radius:8px;padding:9px 11px;
+  }
+  select:focus,input:focus{outline:none;border-color:var(--gold);}
+
+  .icard{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:16px 18px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+  .icard .rname{font-family:'Cormorant Garamond',serif;font-size:1.05rem;font-weight:600;}
+  .icard .rowner{font-size:.72rem;color:var(--slate);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;}
+  .ratio-pill{font-family:'Inter',sans-serif;font-weight:600;font-size:.82rem;color:var(--terracotta);background:#fdf1ea;border:1px solid #f0d9c8;border-radius:20px;padding:5px 13px;white-space:nowrap;}
+
+  .result{display:none;margin-top:14px;}
+  .result.show{display:block;}
+  .rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .opt{background:var(--parchment);border-radius:9px;padding:12px 10px;text-align:center;}
+  .opt.best{background:#fdf1ea;border:1px solid var(--gold);}
+  .opt-label{font-size:.63rem;color:var(--slate);text-transform:uppercase;letter-spacing:.08em;}
+  .opt-value{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;margin-top:3px;color:var(--deep);}
+  .opt.best .opt-value{color:var(--terracotta);}
+
+  .verdict{margin-top:14px;padding:14px 16px;border-radius:9px;font-size:.85rem;line-height:1.6;border-left:3px solid var(--terracotta);background:#fdf6f0;}
+  .verdict.bad{border-left-color:var(--slate);background:var(--parchment);}
+  .verdict b{color:var(--terracotta);}
+  .verdict.bad b{color:var(--slate);}
+
+  .empty{color:#e0dbd4;font-size:.72rem;}
+  .note{margin-top:34px;padding-top:16px;border-top:.5px solid var(--mist);font-size:.72rem;color:#9a9186;line-height:1.7;}
+
+  .sbtn{background:var(--terracotta);color:white;border:none;border-radius:8px;padding:9px 18px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .sbtn:hover{background:#a84d26;}
+  .sbtn:disabled{background:#bbb;cursor:not-allowed;}
+  .bonus-box{background:white;border-radius:11px;border:.5px solid #e0dbd4;padding:16px 18px;font-size:.83rem;line-height:1.7;color:var(--slate);white-space:pre-line;}
+  .bonus-meta{font-size:.68rem;color:#aaa;text-transform:uppercase;letter-spacing:.08em;margin-top:8px;}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  .bspin{display:inline-block;animation:spin 1.6s linear infinite;}
+
+  @media(max-width:560px){.frow{grid-template-columns:1fr;}.rgrid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="/index.html">Europa <em>Compass</em></a>
+  <a class="back" href="/index.html">← Back to Explore</a>
+</nav>
+
+<div class="sw">
+  <div class="seye">Hotel Points</div>
+  <h1 class="stitle">Hotel Points Router</h1>
+  <p class="ssub">Find which card reaches a hotel's loyalty program, then check if the transfer is actually worth it. Nothing here is saved or stored — it's recalculated fresh each time.</p>
+
+  <div class="rt">Which card reaches this hotel?</div>
+  <div class="fcard">
+    <div class="fg full">
+      <label class="flabel">Hotel's Loyalty Program</label>
+      <select id="hotelProgram" onchange="renderRoutes()"></select>
+    </div>
+  </div>
+  <div id="routeResults"></div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 10px;">
+    <div class="rt" style="margin:0;">Any active bonus right now?</div>
+    <button class="sbtn" id="bonusBtn" onclick="checkBonuses()">Check Live →</button>
+  </div>
+  <div id="bonusResult"></div>
+
+  <div class="rt">Is the transfer worth it?</div>
+  <div class="fcard">
+    <div class="frow">
+      <div class="fg">
+        <label class="flabel">Cash Price / Night ($)</label>
+        <input type="number" id="calcCash" placeholder="240" min="0">
+      </div>
+      <div class="fg">
+        <label class="flabel">Award Cost / Night (pts)</label>
+        <input type="number" id="calcPoints" placeholder="12000" min="0">
+      </div>
+      <div class="fg full">
+        <label class="flabel">Transfer From</label>
+        <select id="calcCard"></select>
+      </div>
+      <div class="fg full">
+        <label class="flabel">Your Target Value (¢/point)</label>
+        <input type="number" id="calcTarget" step="0.1" placeholder="1.5" min="0">
+      </div>
+    </div>
+  </div>
+  <div class="result" id="result">
+    <div class="rgrid" id="resultRow"></div>
+    <div class="verdict" id="resultVerdict"></div>
+  </div>
+
+  <div class="note">
+    Transfer ratios reflect what was current when this was built — banks change these without much
+    notice (new partners, devalued ratios, one-off bonuses), so re-check the program's transfer page
+    before moving points, especially for a large redemption. Transfers are almost always one-way.
+  </div>
+</div>
+
+<script>
+const CARDS = {
+  csr:    { name: 'Chase Sapphire Reserve', owner: 'Janice' },
+  chase2: { name: 'Chase (other card)',     owner: 'Janice' },
+  biltJ:  { name: 'Bilt',                   owner: 'Janice' },
+  biltP:  { name: 'Bilt',                   owner: 'Pedro' },
+  ventx:  { name: 'Capital One Venture X',  owner: 'Pedro' },
+};
+
+const HOTEL_PROGRAMS = {
+  hyatt:    { name: 'World of Hyatt',              routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 } ] },
+  marriott: { name: 'Marriott Bonvoy',             routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 } ] },
+  ihg:      { name: 'IHG One Rewards',             routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 } ] },
+  hilton:   { name: 'Hilton Honors',               routes: [ { card:'biltJ', per: 1 },  { card:'biltP', per: 1 } ] },
+  wyndham:  { name: 'Wyndham Rewards',             routes: [ { card:'csr', per: 1 },    { card:'biltJ', per: 1 },    { card:'biltP', per: 1 }, { card:'ventx', per: 1 } ] },
+  accor:    { name: 'Accor Live Limitless',        routes: [ { card:'biltJ', per: 1.5 },{ card:'biltP', per: 1.5 },  { card:'ventx', per: 2 } ] },
+  iprefer:  { name: 'I Prefer / Preferred Hotels', routes: [ { card:'biltJ', per: 0.5 }, { card:'biltP', per: 0.5 }, { card:'ventx', per: 0.5 } ] },
+  choice:   { name: 'Choice Privileges',           routes: [ { card:'ventx', per: 1 } ] },
+  other:    { name: 'Not sure / independent hotel — no transfer route', routes: [] },
+};
+
+function populateHotelSelect() {
+  const sel = document.getElementById('hotelProgram');
+  sel.innerHTML = Object.entries(HOTEL_PROGRAMS).map(([key, p]) => `<option value="${key}">${p.name}</option>`).join('');
+  renderRoutes();
+}
+
+function renderRoutes() {
+  const key = document.getElementById('hotelProgram').value;
+  const program = HOTEL_PROGRAMS[key];
+  const el = document.getElementById('routeResults');
+  if (!program.routes.length) {
+    el.innerHTML = `<div class="verdict bad">No transfer route from your cards to this program. You'd pay cash or earn directly with the hotel.</div>`;
+  } else {
+    el.innerHTML = program.routes.map(r => {
+      const card = CARDS[r.card];
+      const ratioText = r.per === 1 ? '1 : 1' : (r.per < 1 ? `1 : ${(1/r.per).toFixed(1)}` : `${r.per} : 1`);
+      return `
+        <div class="icard">
+          <div>
+            <div class="rname">${card.name}</div>
+            <div class="rowner">${card.owner}</div>
+          </div>
+          <div class="ratio-pill">${ratioText}</div>
+        </div>`;
+    }).join('');
+  }
+  populateCalcCardSelect();
+}
+
+function populateCalcCardSelect() {
+  const key = document.getElementById('hotelProgram').value;
+  const program = HOTEL_PROGRAMS[key];
+  const sel = document.getElementById('calcCard');
+  const currentVal = sel.value;
+  const eligible = program.routes.length
+    ? program.routes.map(r => ({ card: CARDS[r.card], id: r.card, per: r.per }))
+    : Object.entries(CARDS).map(([id, c]) => ({ card: c, id, per: 1 }));
+  sel.innerHTML = eligible.map(r => `<option value="${r.id}" data-per="${r.per}">${r.card.name} (${r.card.owner})</option>`).join('');
+  if (currentVal && eligible.some(r => r.id === currentVal)) sel.value = currentVal;
+  runCalc();
+}
+
+function fmtUSD(n) { return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+
+async function checkBonuses() {
+  const btn = document.getElementById('bonusBtn');
+  const el = document.getElementById('bonusResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="bspin">🧭</span> Checking…';
+  el.innerHTML = '';
+  try {
+    const r = await fetch('/api/check-bonuses', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    el.innerHTML = `<div class="bonus-box">${d.text}</div><div class="bonus-meta">Checked live just now — re-check before transferring for anything time-sensitive.</div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="verdict bad"><b>Couldn't check right now.</b> ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Check Live →';
+}
+
+function runCalc() {
+  const cash = parseFloat(document.getElementById('calcCash').value) || 0;
+  const awardPoints = parseFloat(document.getElementById('calcPoints').value) || 0;
+  const cardSel = document.getElementById('calcCard');
+  const per = parseFloat(cardSel.selectedOptions[0]?.dataset.per || '1');
+  const cardName = cardSel.selectedOptions[0]?.textContent || '';
+  const target = parseFloat(document.getElementById('calcTarget').value) || 1.5;
+
+  const resultEl = document.getElementById('result');
+  if (awardPoints <= 0 || cash <= 0) { resultEl.classList.remove('show'); return; }
+  resultEl.classList.add('show');
+
+  const nativeNeeded = awardPoints * per;
+  const achievedCpp = (cash * 100) / nativeNeeded;
+  const good = achievedCpp >= target;
+
+  document.getElementById('resultRow').innerHTML = `
+    <div class="opt"><div class="opt-label">Cash / Night</div><div class="opt-value">${fmtUSD(cash)}</div></div>
+    <div class="opt"><div class="opt-label">Points Needed</div><div class="opt-value">${Math.round(nativeNeeded).toLocaleString()}</div></div>
+    <div class="opt ${good ? 'best' : ''}"><div class="opt-label">Value</div><div class="opt-value">${achievedCpp.toFixed(2)}\u00a2</div></div>
+  `;
+  const verdictEl = document.getElementById('resultVerdict');
+  verdictEl.className = 'verdict' + (good ? '' : ' bad');
+  verdictEl.innerHTML = good
+    ? `<b>Good redemption.</b> ${achievedCpp.toFixed(2)}\u00a2/point from ${cardName.split(' (')[0]} clears your ${target.toFixed(1)}\u00a2 target — worth transferring.`
+    : `<b>Below your target.</b> Only ${achievedCpp.toFixed(2)}\u00a2/point, under your ${target.toFixed(1)}\u00a2 bar. Pay cash and save these points for a redemption that clears it.`;
+}
+
+['calcCash', 'calcPoints', 'calcCard', 'calcTarget'].forEach(id => {
+  document.getElementById(id).addEventListener('input', runCalc);
+});
+
+populateHotelSelect();
+</script>
+</body>
+</html>
