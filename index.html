@@ -185,6 +185,23 @@
   #disc-map,#itin-map{width:100%;height:340px;}
   .map-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:600;padding:10px 14px;background:#faf7f2;border-bottom:.5px solid var(--mist);}
   .pac-container{font-family:'Inter',sans-serif;z-index:2000;}
+
+  /* Local Basics */
+  .basics-ssub{font-size:.85rem;color:var(--slate);line-height:1.6;margin-top:-14px;margin-bottom:22px;max-width:52ch;}
+  .basics-frow{display:flex;gap:10px;align-items:end;flex-wrap:wrap;}
+  .basics-fg{flex:1;min-width:180px;display:flex;flex-direction:column;gap:4px;}
+  .basics-fg input{border:1px solid var(--mist);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:.88rem;background:var(--warm-white);color:var(--ink);}
+  .basics-fg input:focus{outline:none;border-color:var(--gold);}
+  .plist{display:flex;flex-direction:column;gap:2px;}
+  .pitem{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:.5px solid var(--mist);}
+  .pitem:first-child{border-top:none;}
+  .ptext{flex:1;min-width:0;}
+  .pphrase{font-weight:600;font-size:.92rem;color:var(--deep);}
+  .pphonetic{color:var(--terracotta);font-size:.78rem;font-style:italic;margin-top:1px;}
+  .ptranslation{color:var(--slate);font-size:.78rem;margin-top:1px;}
+  .playbtn{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:var(--parchment);border:.5px solid #d8d2c8;color:var(--terracotta);font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+  .playbtn:hover{background:#f0e3d3;}
+  .playbtn.loading{opacity:.5;}
 </style>
 </head>
 <body>
@@ -198,6 +215,7 @@
     <button class="tab" onclick="showTab('sync')">Voyage Sync</button>
     <button class="tab" onclick="showTab('trips')">My Trips</button>
     <button class="tab" onclick="showTab('points')">Points</button>
+    <button class="tab" onclick="showTab('basics')">Basics</button>
   </div>
 </nav>
 
@@ -432,6 +450,28 @@
   </div>
 </div>
 
+<!-- LOCAL BASICS -->
+<div id="tab-basics" class="panel">
+  <div class="sw">
+    <div class="seye">Before You Arrive</div>
+    <h2 class="stitle" style="margin-bottom:8px">Local Basics</h2>
+    <p class="basics-ssub">Enough of the language to be polite, get around, and order well. Not a course — just what you need for the trip.</p>
+
+    <div class="fcard">
+      <div class="basics-frow">
+        <div class="basics-fg">
+          <label class="flabel">Country</label>
+          <input id="basicsCountry" placeholder="Portugal" autocomplete="off">
+        </div>
+        <button class="sbtn" id="basicsBtn" onclick="generateBasics()">Generate →</button>
+      </div>
+      <div id="basics-hint" style="font-size:.72rem;color:#aaa;margin-top:8px"></div>
+    </div>
+
+    <div id="basics-results"></div>
+  </div>
+</div>
+
 <!-- MODAL -->
 <div id="modal" class="overlay" onclick="if(event.target===this)closeModal()">
   <div class="modal">
@@ -635,7 +675,7 @@ function showTab(id){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   document.querySelectorAll('.tab').forEach((b,i)=>{
-    b.classList.toggle('active',['discover','intel','itinerary','sync','trips','points'][i]===id);
+    b.classList.toggle('active',['discover','intel','itinerary','sync','trips','points','basics'][i]===id);
   });
   if(id==='itinerary') renderItinerary();
   if(id==='trips') renderTrips();
@@ -1169,6 +1209,104 @@ function runPtsCalc(){
     ? `<b>Good redemption.</b> ${achievedCpp.toFixed(2)}¢/point from ${cardName.split(' (')[0]} clears your ${target.toFixed(1)}¢ target — worth transferring.`
     : `<b>Below your target.</b> Only ${achievedCpp.toFixed(2)}¢/point, under your ${target.toFixed(1)}¢ bar. Pay cash and save these points for a redemption that clears it.`;
 }
+
+// ── Local Basics ──
+const BASICS_LANGUAGE_MAP = {
+  'portugal': 'European Portuguese',
+  'spain': 'Spanish (Castilian)',
+  'france': 'French',
+  'italy': 'Italian',
+  'germany': 'German',
+  'switzerland': 'Swiss German',
+  'greece': 'Greek',
+  'croatia': 'Croatian',
+  'morocco': 'Moroccan Arabic',
+};
+const BASICS_CATEGORY_ICONS = {
+  'greetings': '👋',
+  'politeness': '🙏',
+  'ordering food and drink': '🍷',
+  'directions and transport': '🚇',
+  'shopping and money': '💶',
+  'emergencies and help': '🛡️',
+};
+function basicsCacheKey(country){ return `ec_basics_${country.trim().toLowerCase()}`; }
+function basicsGuessLanguage(country){ return BASICS_LANGUAGE_MAP[country.trim().toLowerCase()] || `the primary language of ${country}`; }
+
+function renderBasics(data){
+  const byCategory={};
+  data.phrases.forEach(p=>{
+    if(!byCategory[p.category]) byCategory[p.category]=[];
+    byCategory[p.category].push(p);
+  });
+  let h='<div class="igrid">';
+  Object.entries(byCategory).forEach(([category,phrases])=>{
+    const icon=BASICS_CATEGORY_ICONS[category]||'🗣';
+    h+=`<div class="icard"><div class="ihd"><div class="iico">${icon}</div><div class="ictitle">${category}</div></div><div class="plist">`;
+    phrases.forEach(p=>{
+      h+=`<div class="pitem">
+        <div class="ptext">
+          <div class="pphrase">${p.phrase}</div>
+          <div class="pphonetic">${p.phonetic}</div>
+          <div class="ptranslation">${p.translation}</div>
+        </div>
+        <button class="playbtn" title="Play pronunciation" onclick='playBasicsPhrase(${JSON.stringify(p.phrase)},this)'>▶</button>
+      </div>`;
+    });
+    h+='</div></div>';
+  });
+  document.getElementById('basics-results').innerHTML=h+'</div>';
+}
+
+async function playBasicsPhrase(text,btn){
+  btn.classList.add('loading');btn.disabled=true;
+  try{
+    const res=await fetch('/api/speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    if(!res.ok) throw new Error('TTS request failed');
+    const blob=await res.blob();
+    const audio=new Audio(URL.createObjectURL(blob));
+    await audio.play();
+  }catch(err){
+    console.error(err);
+    document.getElementById('basics-hint').textContent='Could not play audio — check /api/speak is deployed and GOOGLE_API_KEY is set.';
+  }finally{
+    btn.classList.remove('loading');btn.disabled=false;
+  }
+}
+
+async function generateBasics(){
+  const input=document.getElementById('basicsCountry');
+  const country=input.value.trim();
+  if(!country)return;
+  document.getElementById('basics-hint').textContent='';
+
+  const key=basicsCacheKey(country);
+  const cached=localStorage.getItem(key);
+  if(cached){ renderBasics(JSON.parse(cached)); return; }
+
+  const btn=document.getElementById('basicsBtn');
+  btn.disabled=true;
+  document.getElementById('basics-results').innerHTML=`<div class="loading"><div class="spinner">🧭</div><div class="load-txt">Learning the basics of ${country}…</div></div>`;
+
+  try{
+    const res=await fetch('/api/generate-phrases',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({country,language:basicsGuessLanguage(country)})
+    });
+    if(!res.ok) throw new Error('Generation failed');
+    const data=await res.json();
+    localStorage.setItem(key,JSON.stringify(data));
+    renderBasics(data);
+  }catch(err){
+    console.error(err);
+    showErr('basics-results','Something went wrong generating phrases. Check the console and your API keys.');
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+document.getElementById('basicsCountry').addEventListener('keydown',e=>{if(e.key==='Enter')generateBasics();});
 </script>
 <script src="/import.js" defer></script>
 </body>
