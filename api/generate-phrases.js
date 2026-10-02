@@ -3,11 +3,13 @@
 // Calls Claude to produce a structured survival-phrase set for a given
 // country/language. Same ANTHROPIC_API_KEY pattern as ask.js.
 //
-// Edge runtime is fine here (pure text generation, no binary payloads) —
-// consistent with ask.js.
+// RUNTIME NOTE: this must run on the Node.js runtime, NOT Edge. The Claude
+// call takes ~20-30s, which exceeds the Edge function's execution limit and
+// caused silent timeouts (HTTP 504, "Something went wrong generating phrases").
+// ask.js uses Node + maxDuration 60 for the same reason.
 
 export const config = {
-  runtime: 'edge',
+  maxDuration: 60,
 };
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
@@ -21,29 +23,31 @@ const CATEGORIES = [
   'emergencies and help',
 ];
 
-export default async function handler(req) {
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Use POST' }), { status: 405 });
+    res.status(405).json({ error: 'Use POST' });
+    return;
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), { status: 500 });
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+    return;
   }
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400 });
-  }
-
-  const { country, language } = body || {};
+  // Vercel's Node runtime auto-parses a JSON request body into req.body —
+  // there is no req.json() here (that's an Edge-only API).
+  const { country, language } = req.body || {};
   if (!country || !language) {
-    return new Response(
-      JSON.stringify({ error: 'Provide "country" and "language", e.g. {"country":"Portugal","language":"European Portuguese"}' }),
-      { status: 400 }
-    );
+    res.status(400).json({
+      error: 'Provide "country" and "language", e.g. {"country":"Portugal","language":"European Portuguese"}',
+    });
+    return;
   }
 
   const prompt = `Generate a survival phrase set for a traveler visiting ${country}, in ${language}.
@@ -74,7 +78,8 @@ Respond with ONLY a JSON array of objects with those four keys. No preamble, no 
 
     if (!claudeRes.ok) {
       const errBody = await claudeRes.text();
-      return new Response(JSON.stringify({ error: 'Claude request failed', detail: errBody }), { status: claudeRes.status });
+      res.status(claudeRes.status).json({ error: 'Claude request failed', detail: errBody });
+      return;
     }
 
     const data = await claudeRes.json();
@@ -87,17 +92,12 @@ Respond with ONLY a JSON array of objects with those four keys. No preamble, no 
     try {
       phrases = JSON.parse(cleaned);
     } catch {
-      return new Response(
-        JSON.stringify({ error: 'Could not parse Claude response as JSON', raw: rawText }),
-        { status: 502 }
-      );
+      res.status(502).json({ error: 'Could not parse Claude response as JSON', raw: rawText });
+      return;
     }
 
-    return new Response(JSON.stringify({ country, language, phrases }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    res.status(200).json({ country, language, phrases });
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'Phrase generation failed', detail: String(err) }), { status: 500 });
+    res.status(500).json({ error: 'Phrase generation failed', detail: String(err) });
   }
 }
