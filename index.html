@@ -183,6 +183,12 @@
 
   .map-wrap{margin-top:22px;border-radius:12px;overflow:hidden;border:.5px solid #e0dbd4;}
   #disc-map,#itin-map{width:100%;height:340px;}
+  .sync-ac-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--mist);border-radius:10px;margin-top:4px;box-shadow:0 10px 28px rgba(40,30,20,.14);z-index:60;overflow:hidden;max-height:260px;overflow-y:auto;}
+  .sync-ac-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1ede7;}
+  .sync-ac-item:last-child{border-bottom:none;}
+  .sync-ac-item:hover{background:#faf7f1;}
+  .sync-ac-main{font-size:.85rem;font-weight:600;color:var(--ink);}
+  .sync-ac-sub{font-size:.72rem;color:#8a8478;margin-top:2px;}
   .map-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.12em;color:#888;font-weight:600;padding:10px 14px;background:#faf7f2;border-bottom:.5px solid var(--mist);}
   .pac-container{font-family:'Inter',sans-serif;z-index:2000;}
 
@@ -441,6 +447,10 @@
       <div class="pts-rgrid" id="ptsResultRow"></div>
       <div class="pts-verdict" id="ptsResultVerdict"></div>
     </div>
+    <div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <button class="sbtn" style="width:auto" onclick="runPtsCalc(true)">Calculate →</button>
+      <span id="ptsCalcHint" style="font-size:.72rem;color:#aaa">Enter a cash price and award cost above, then calculate — or just type and watch it update live.</span>
+    </div>
 
     <div style="margin-top:34px;padding-top:16px;border-top:.5px solid var(--mist);font-size:.72rem;color:#9a9186;line-height:1.7;">
       Transfer ratios reflect what was current when this was built — banks change these without much
@@ -503,8 +513,7 @@ let syncSession = loadJSON('ec_syncSession', null); // {code,name,partner,places
 let syncPoll = null;
 
 // ── Google Maps ──
-let discMap=null, discMarkers=[], itinMap=null, itinMarkers=[];
-let syncPlaceAutocomplete=null, syncPlacePicked=null;
+let discMap=null, discMarkers=[], itinMap=null, itinMarkers=[], itinPolyline=null;
 function whenGmapsReady(cb){
   if(window._gmapsLoaded) cb();
   else { window._gmapsWaiters = window._gmapsWaiters||[]; window._gmapsWaiters.push(cb); }
@@ -544,29 +553,124 @@ function renderItinMap(){
     if(!itinMap) itinMap=new google.maps.Map(document.getElementById('itin-map'),{zoom:12,center:items[0]});
     itinMarkers.forEach(m=>m.setMap(null));
     itinMarkers=plotMarkers(itinMap,items);
+    if(itinPolyline) itinPolyline.setMap(null);
+    if(items.length>1){
+      itinPolyline=new google.maps.Polyline({
+        path:items.map(p=>({lat:p.lat,lng:p.lng})),
+        geodesic:true,
+        strokeColor:'#c05a2e',
+        strokeOpacity:.9,
+        strokeWeight:3,
+        icons:[{icon:{path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW},offset:'100%',repeat:'140px'}]
+      });
+      itinPolyline.setMap(itinMap);
+    }
   });
 }
+let syncPlacesReady=false, syncPlacePicked=null, syncPlaceSessionToken=null;
 function setupSyncAutocomplete(){
   const input=document.getElementById('add-place');
-  if(!input||syncPlaceAutocomplete)return;
+  if(!input||syncPlacesReady)return;
+  // NOTE: google.maps.places.Autocomplete (legacy) is deprecated and no longer
+  // included in the current Places library build — calling it throws and leaves
+  // the Add button permanently disabled. We use the new Places API suggestion
+  // service instead, with a manual-entry fallback if Places is unavailable
+  // (e.g. the API key doesn't have the Places API enabled).
   whenGmapsReady(()=>{
-    syncPlaceAutocomplete=new google.maps.places.Autocomplete(input,{fields:['name','geometry','address_components']});
-    syncPlaceAutocomplete.addListener('place_changed',()=>{
-      const place=syncPlaceAutocomplete.getPlace();
-      if(!place.geometry){ syncPlacePicked=null; document.getElementById('add-place-btn').disabled=true; return; }
-      const cityComp=(place.address_components||[]).find(c=>c.types.includes('locality'))
-        ||(place.address_components||[]).find(c=>c.types.includes('administrative_area_level_2'))
-        ||(place.address_components||[]).find(c=>c.types.includes('administrative_area_level_1'));
-      syncPlacePicked={
-        name: place.name,
-        city: cityComp?cityComp.long_name:'',
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
-      };
-      document.getElementById('add-place-btn').disabled=false;
-      document.getElementById('add-place-hint').textContent=`Ready to add: ${place.name}${cityComp?' · '+cityComp.long_name:''}`;
+    let Suggest=null;
+    try{ Suggest=google.maps.places && google.maps.places.AutocompleteSuggestion; }catch(e){}
+    if(!Suggest || !Suggest.fetchAutocompleteSuggestions){
+      syncPlacesManual('Place search is unavailable in this browser session — type the place name below and add it manually.');
+      return;
+    }
+    syncPlacesReady=true;
+    const wrap=input.parentElement;
+    wrap.style.position='relative';
+    const dropdown=document.createElement('div');
+    dropdown.className='sync-ac-dropdown';
+    wrap.appendChild(dropdown);
+    const newToken=()=>{ try{ syncPlaceSessionToken=new google.maps.places.AutocompleteSessionToken(); }catch(e){ syncPlaceSessionToken=null; } };
+    const hide=()=>{ dropdown.style.display='none'; dropdown.innerHTML=''; };
+    newToken();
+    let debounce=null;
+    input.addEventListener('input',()=>{
+      clearTimeout(debounce);
+      const q=input.value.trim();
+      syncPlacePicked=null;
+      document.getElementById('add-place-btn').disabled=true;
+      if(q.length<3){ hide(); return; }
+      debounce=setTimeout(async()=>{
+        try{
+          const res=await Suggest.fetchAutocompleteSuggestions({input:q,sessionToken:syncPlaceSessionToken});
+          const suggestions=res.suggestions||[];
+          if(!suggestions.length){ hide(); return; }
+          dropdown.innerHTML='';
+          suggestions.slice(0,6).forEach(s=>{
+            const pred=s.placePrediction;
+            if(!pred) return;
+            const main=(pred.text&&pred.text.text)||(typeof pred.text==='string'?pred.text:'');
+            const sub=(pred.secondaryText&&pred.secondaryText.text)||(typeof pred.secondaryText==='string'?pred.secondaryText:'');
+            const item=document.createElement('div');
+            item.className='sync-ac-item';
+            item.innerHTML='<div class="sync-ac-main"></div><div class="sync-ac-sub"></div>';
+            item.querySelector('.sync-ac-main').textContent=main;
+            item.querySelector('.sync-ac-sub').textContent=sub;
+            item.addEventListener('mousedown',async(ev)=>{
+              ev.preventDefault();
+              try{
+                const place=pred.toPlace();
+                await place.fetchFields({fields:['displayName','location','addressComponents']});
+                const comps=place.addressComponents||[];
+                const cityComp=comps.find(c=>(c.types||[]).includes('locality'))
+                  ||comps.find(c=>(c.types||[]).includes('administrative_area_level_2'))
+                  ||comps.find(c=>(c.types||[]).includes('administrative_area_level_1'));
+                const name=(place.displayName&&place.displayName.text)||place.displayName||main;
+                syncPlacePicked={
+                  name,
+                  city:cityComp?(cityComp.longText||cityComp.long_name):'',
+                  lat:place.location?place.location.lat():null,
+                  lng:place.location?place.location.lng():null,
+                };
+                input.value=name;
+                hide();
+                document.getElementById('add-place-hint').textContent=`Ready to add: ${name}${syncPlacePicked.city?' · '+syncPlacePicked.city:''}`;
+                document.getElementById('add-place-btn').disabled=false;
+                newToken();
+              }catch(err){
+                document.getElementById('add-place-hint').textContent='Could not load place details — pick another result or add it manually.';
+              }
+            });
+            dropdown.appendChild(item);
+          });
+          dropdown.style.display='block';
+        }catch(err){
+          hide();
+          syncPlacesManual('Place search is unavailable (the Google key needs the Places API enabled). Type the place name below and add it manually.');
+        }
+      },300);
     });
+    input.addEventListener('blur',()=>setTimeout(hide,150));
   });
+}
+
+// Manual-entry fallback: lets the user add a place by name when Places
+// autocomplete is unavailable. Coordinates are optional server-side
+// (stored as null); addToSync already defaults a missing city to 'Unknown'.
+function syncPlacesManual(msg){
+  if(syncPlacesReady) return;
+  syncPlacesReady=true;
+  const input=document.getElementById('add-place');
+  const btn=document.getElementById('add-place-btn');
+  const hint=document.getElementById('add-place-hint');
+  if(hint && msg) hint.textContent=msg;
+  if(!input||!btn) return;
+  const refresh=()=>{
+    const v=input.value.trim();
+    if(v){ syncPlacePicked={name:v,city:'',lat:null,lng:null}; btn.disabled=false; }
+    else { syncPlacePicked=null; btn.disabled=true; }
+  };
+  input.addEventListener('input',refresh);
+  refresh();
 }
 
 function persistSaved(){ saveJSON('ec_saved', saved); }
@@ -821,7 +925,7 @@ async function runIntel(){
 Provide:
 - transport: "Getting Around" (🚇) — 5 specific bullets
 - culture: "Culture & Etiquette" (🎭) — 4 bullets
-- money: "Money & Budget" (💶) — 4 bullets
+- money: "Money & Budget" (💶) — 4 bullets; quote ALL prices in the country's CURRENT official currency only — never use obsolete or replaced currencies (e.g. Croatia has used the euro since January 2023, not the kuna; double-check any country that changed currency in recent years)
 - food: "Food & Drink Scene" (🍷) — 5 bullets
 - safety: "Safety & Scams" (🛡️) — 4 tips
 ${month?`- timing: "Traveling in ${month}" (📅) — 4 month-specific tips`:''}`, intelSchema, 4000);
@@ -1182,7 +1286,7 @@ async function checkPtsBonuses(){
   btn.textContent = 'Check Live →';
 }
 
-function runPtsCalc(){
+function runPtsCalc(fromButton){
   const cash = parseFloat(document.getElementById('ptsCash').value) || 0;
   const awardPoints = parseFloat(document.getElementById('ptsPoints').value) || 0;
   const cardSel = document.getElementById('ptsCard');
@@ -1191,7 +1295,13 @@ function runPtsCalc(){
   const target = parseFloat(document.getElementById('ptsTarget').value) || 1.5;
 
   const resultEl = document.getElementById('ptsResult');
-  if (awardPoints <= 0 || cash <= 0) { resultEl.classList.remove('show'); return; }
+  const hintEl = document.getElementById('ptsCalcHint');
+  if (awardPoints <= 0 || cash <= 0) {
+    resultEl.classList.remove('show');
+    if (fromButton && hintEl) hintEl.textContent = 'Enter both a cash price and an award cost above to see the verdict.';
+    return;
+  }
+  if (hintEl) hintEl.textContent = '';
   resultEl.classList.add('show');
 
   const nativeNeeded = awardPoints * per;
@@ -1277,8 +1387,9 @@ async function playBasicsPhrase(text,btn){
 async function generateBasics(){
   const input=document.getElementById('basicsCountry');
   const country=input.value.trim();
-  if(!country)return;
-  document.getElementById('basics-hint').textContent='';
+  const hintEl=document.getElementById('basics-hint');
+  if(!country){ hintEl.textContent='Type a country above first — e.g. Portugal.'; input.focus(); return; }
+  hintEl.textContent='';
 
   const key=basicsCacheKey(country);
   const cached=localStorage.getItem(key);
@@ -1294,13 +1405,17 @@ async function generateBasics(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({country,language:basicsGuessLanguage(country)})
     });
-    if(!res.ok) throw new Error('Generation failed');
+    if(!res.ok){
+      let msg=`Generation failed (server returned ${res.status})`;
+      try{ const eb=await res.json(); if(eb.error) msg=eb.error+(eb.detail?` — ${String(eb.detail).slice(0,220)}`:''); }catch(e){}
+      throw new Error(msg);
+    }
     const data=await res.json();
     localStorage.setItem(key,JSON.stringify(data));
     renderBasics(data);
   }catch(err){
     console.error(err);
-    showErr('basics-results','Something went wrong generating phrases. Check the console and your API keys.');
+    showErr('basics-results','Something went wrong generating phrases: '+err.message);
   }finally{
     btn.disabled=false;
   }
